@@ -24,6 +24,16 @@
     vector<>    Systems();
 */
 
+/* STORAGE SPECIFICATION
+ *
+ * _components:
+ *   - Entity size
+ *   - Entity data:
+ *      - Component size
+ *      - Component ID
+ *      - Component data
+ */
+
 #ifndef ENGINE_HH_
 #define ENGINE_HH_
 
@@ -43,25 +53,36 @@ typedef uint32_t entity_size_t;
 
 #define COMP_ID(x) static constexpr size_t _COMP_ID = (x);
 
+struct test_debug;
+
+namespace ECS {
+
 typedef size_t Entity;
 
 template<typename entity_size_t=uint32_t, typename component_size_t=uint16_t, typename component_id_t=uint16_t>
 class Engine {
-	friend struct test_debug;  // for debugging
+    friend ::test_debug;  // for debugging
 public:
+    //
+    // ENGINE MANAGEMENT
+    //
+    void Reset() {{{
+        _components.clear(); _components.shrink_to_fit();
+        _entity_index.clear(); _entity_index.shrink_to_fit();
+    }}}
+
     //
     // ENTITY MANAGEMENT
     //
     Entity CreateEntity() {{{
 		_entity_index.push_back(_components.size());
         entity_size_t sz = sizeof(entity_size_t);
-		_components.resize(sz, 0);
+		_components.resize(_components.size() + sz, 0);
         memcpy(&_components[_components.size()-sz], &sz, sz);
 		return _entity_index.size() - 1;
 	}}}
 
-    void RemoveEntity() { }
-    size_t EntityCount() {{{ 
+    size_t EntityCount() const {{{ 
 		return _entity_index.size(); 
 	}}}
 
@@ -117,10 +138,17 @@ public:
     template<typename C> void RemoveComponent(Entity entity) {{{
         FindComponent<void*, C>(entity, 
                 [&](entity_size_t i, bool& ret) {
+                    // set as deleted
                     component_id_t deleted = std::numeric_limits<component_id_t>::max();
                     memcpy(&_components[i + sizeof(component_size_t)], &deleted, sizeof(component_id_t));
-                    ret = true;
-                    return nullptr;
+                    // find component size
+                    component_size_t sz = 0;
+                    memcpy(&sz, &_components[i], sizeof(component_size_t));
+                    sz = static_cast<component_size_t>(sz - sizeof(component_size_t) - sizeof(component_id_t));
+                    // clear memory area
+                    memset(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)], 0, sz);
+
+                    ret = true; return nullptr;
                 },
                 []() -> void* {
                     fprintf(stderr, "Entity does not contain this component.\n");
@@ -129,31 +157,7 @@ public:
         );
     }}}
 
-    template<typename C> bool HasComponent(Entity entity) {{{
-        return FindComponent<bool, C>(entity, 
-                [](entity_size_t, bool& ret){ ret = true; return true; }, 
-                [](){ return false; }
-        );
-    }}}
-
-    template<typename C> C& GetComponent(Entity entity) {{{
-        FindComponent<C&, C>(entity, 
-                [&](entity_size_t i, bool& ret) -> C& {
-                    component_id_t id = 0;
-                    memcpy(&id, &_components[i + sizeof(component_size_t)], sizeof(component_id_t));
-                    if(id == static_cast<component_id_t>(C::_COMP_ID)) {
-                        ret = true;
-                        return *reinterpret_cast<C*>(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)]);
-                    }
-                    ret = false;
-                    return *reinterpret_cast<C*>(0);  // shouldn't be used
-                },
-                []() -> C& {
-                    fprintf(stderr, "Entity does not contain this component.\n");
-                    abort();
-                }
-        );
-
+    void RemoveAllComponents(Entity entity) {{{
         // find index
 		assert(entity < _entity_index.size());
 		size_t idx = _entity_index[entity];
@@ -165,20 +169,52 @@ public:
         // find component
         entity_size_t i = static_cast<entity_size_t>(idx + sizeof(entity_size_t));
         while(i < (idx + sz)) {
-            component_id_t id = 0;
-            memcpy(&id, &_components[i + sizeof(component_size_t)], sizeof(component_id_t));
-            if(id == static_cast<component_id_t>(C::_COMP_ID)) {
-                return *reinterpret_cast<C*>(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)]);
-            }
+            // set as deleted
+            component_id_t deleted = std::numeric_limits<component_id_t>::max();
+            memcpy(&_components[i + sizeof(component_size_t)], &deleted, sizeof(component_id_t));
+            // find component size
+            component_size_t sz = 0;
+            memcpy(&sz, &_components[i], sizeof(component_size_t));
+            sz = static_cast<component_size_t>(sz - sizeof(component_size_t) - sizeof(component_id_t));
+            // clear memory area
+            memset(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)], 0, sz);
            
             component_size_t csz = 0;
             memcpy(&csz, &_components[i], sizeof(component_id_t));
             i += csz;
         }
-        
-        fprintf(stderr, "Entity does not contain this component.\n");
-        abort();
+    }}}
+
+    template<typename C> bool HasComponent(Entity entity) const {{{
+        return FindComponent<bool, C>(entity, 
+                [](entity_size_t, bool& ret){ ret = true; return true; }, 
+                [](){ return false; }
+        );
+    }}}
+
+    template<typename C> C const& GetComponent(Entity entity) const {{{
+        return FindComponent<C const&, C>(entity, 
+                [&](entity_size_t i, bool& ret) -> C const& {
+                    component_id_t id = 0;
+                    memcpy(&id, &_components[i + sizeof(component_size_t)], sizeof(component_id_t));
+                    if(id == static_cast<component_id_t>(C::_COMP_ID)) {
+                        ret = true;
+                        return *reinterpret_cast<C const*>(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)]);
+                    }
+                    ret = false;
+                    return *reinterpret_cast<C const*>(0);  // shouldn't be used
+                },
+                []() -> C& {
+                    fprintf(stderr, "Entity does not contain this component.\n");
+                    abort();
+                }
+        );
 	}}}
+
+    template<typename C> C& GetComponent(Entity entity) {{{
+        // call the const version of this method
+        return const_cast<C&>(static_cast<Engine const*>(this)->GetComponent<C>(entity));
+    }}}
 
     //
     // ITERATING
@@ -199,9 +235,7 @@ private:
 		return 0;  // TODO
 	}}}
 
-
-    template<typename R, typename C, typename F1, typename F2> 
-    R FindComponent(Entity entity, F1 const& if_found, F2 const& if_not_found) {{{
+    template<typename R, typename C, typename F1, typename F2> R FindComponent(Entity entity, F1 const& if_found, F2 const& if_not_found) const {{{
         // find index
 		assert(entity < _entity_index.size());
 		size_t idx = _entity_index[entity];
@@ -230,6 +264,8 @@ private:
         return if_not_found();   
     }}}
 };
+
+}  // namespace ECS
 
 #endif
 
