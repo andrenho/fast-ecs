@@ -76,6 +76,20 @@ int main()
 	test_debug::examine("empty engine", e);
 
 	e1 = e.CreateEntity();
+	e2 = e.CreateEntity();
+	test_debug::examine("two entities created", e);
+
+	e.AddComponent<Direction, uint8_t>(e1, 0xFB);
+	test_debug::examine("direction added to e1", e);
+
+	e.AddComponent<Position, uint8_t, uint8_t>(e1, 4, 5);
+	test_debug::examine("position added to e1", e);
+
+	e.AddComponent<Direction, uint8_t>(e2, 0xAB);
+	test_debug::examine("direction added to e2", e);
+
+	/*
+	e1 = e.CreateEntity();
 	test_debug::examine("entity 1 created", e);
 
 	e.AddComponent<Direction, uint8_t>(e1, 0x50);
@@ -89,6 +103,7 @@ int main()
 	test_debug::examine("direction readded", e);  // TODO - reuse component
 
 	cout << "------------------------------\n\n";
+	*/
 
 	// TODO - reuse entity
 	

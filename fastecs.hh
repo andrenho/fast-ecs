@@ -114,7 +114,7 @@ public:
 		}
 
 		// open space
-		size_t comp_pos = ChangeSpace(idx, extend_size);
+		size_t comp_pos = ChangeSpace(idx + sz, extend_size);
 		
 		// change entity size
 		sz += static_cast<entity_size_t>(extend_size);
@@ -228,9 +228,8 @@ private:
 	size_t ChangeSpace(size_t pos, size_t sz) {{{
         (void) pos;
 		if(sz > 0) {
-			size_t n = _components.size();
-			_components.resize(_components.size() + sz);
-			return n;
+            _components.insert(begin(_components) + pos, sz, 0);
+			return pos;
 		}
 		return 0;  // TODO
 	}}}
