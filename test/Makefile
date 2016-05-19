@@ -1,7 +1,7 @@
 #
 # variables
 # 
-CXXFLAGS = --std=c++14 @warnings.txt -g -ggdb3 -O0 -DDEBUG -fno-inline-functions
+CXXFLAGS = --std=c++14 @warnings.txt -g -ggdb3 -O0 -fno-inline-functions -I.. -DDEBUG
 LDFLAGS = -g
 ifeq ($(CXX),g++)
   CXXFLAGS += -fno-inline-small-functions

@@ -46,10 +46,10 @@
 #include <limits>
 #include <vector>
 
-/*
-typedef uint16_t component_id_t;
-typedef uint32_t entity_size_t;
-*/
+#ifdef DEBUG
+#  include <string>
+#  include <sstream>
+#endif
 
 #define COMP_ID(x) static constexpr size_t _COMP_ID = (x);
 
@@ -114,7 +114,7 @@ public:
 		}
 
 		// open space
-		size_t comp_pos = ChangeSpace(idx + sz, extend_size);
+		size_t comp_pos = ChangeSpace(idx + sz, extend_size, entity);
 		
 		// change entity size
 		sz += static_cast<entity_size_t>(extend_size);
@@ -221,14 +221,48 @@ public:
     //
     template<typename F, typename... C> void ForEach(F const& f) {}
 
+    // {{{ DEBUGGING
+#ifdef DEBUG
+    //
+    // DEBUGGING
+    //
+    template<typename... C> std::string Examine(Entity ent=std::numeric_limits<component_size_t>::max()) const {
+        std::string s;
+        if(ent == std::numeric_limits<component_size_t>::max()) {
+            for(Entity i=0; i<_entity_index.size(); ++i) {
+                s += Examine<C...>(i);
+            }
+        } else {
+            std::stringstream ss;
+            ss << "Entity " << ent << "\n";
+            [&](...){ }(ExamineComponent<C>(ss, ent)...);
+            s = ss.str();
+        }
+        return s;
+    }
+private:
+    template<typename C> int ExamineComponent(std::stringstream& ss, Entity ent) const {
+        if(HasComponent<C>(ent)) {
+            C const& comp = GetComponent<C>(ent);
+            ss << "  " << comp.to_str() << "\n";
+        }
+        return 42;
+    }
+public:
+#endif
+    // }}}
+
 private:
 	std::vector<size_t>  _entity_index = {};
 	std::vector<uint8_t> _components = {};
 
-	size_t ChangeSpace(size_t pos, size_t sz) {{{
+	size_t ChangeSpace(size_t pos, size_t sz, Entity entity) {{{
         (void) pos;
 		if(sz > 0) {
             _components.insert(begin(_components) + pos, sz, 0);
+            for(Entity e=entity+1; e < _entity_index.size(); ++e) {
+                _entity_index[e] += sz;
+            }
 			return pos;
 		}
 		return 0;  // TODO
@@ -262,6 +296,7 @@ private:
         }
         return if_not_found();   
     }}}
+
 };
 
 }  // namespace ECS
