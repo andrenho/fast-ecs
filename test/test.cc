@@ -74,83 +74,82 @@ struct test_debug {
             i = j;
         }
 		cout << KNRM "]\n";
-        cout << e.Examine<Direction, Position>() << "\n\n";
+        cout << e.Examine<Direction, Position>() << "\n";
 	}
 };
 
 #define M(...) __VA_ARGS__
 #define DO(s) s; cout << KCYN << #s ";" << KNRM << "\n"; test_debug::examine(e);
 
-#define ASSERT(s) s; cout << KCYN << #s ";" << KNRM << "\n"; assert(s);
+#define ASSERT(s) cout << KCYN << #s ";" << KNRM << "\n"; assert(s);
+
+#define EXPECT(v) { if(e.ComponentVector() != vector<uint8_t>(v)) { cout << KRED "Assertion error!\n"; abort(); } }
 
 int main()
 {
 	DO(ECS::Engine<> e);
+    EXPECT({});
     DO(ECS::Entity e1 = e.CreateEntity());
+    EXPECT(M({0x04, 0x00, 0x00, 0x00}));
 	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 0x50));
+    EXPECT(M({0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x50}));
 	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x50, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
 
 	ASSERT(e.GetComponent<Position>(e1).y == 8);
 	ASSERT(e.GetComponent<Direction>(e1).angle == 0x50);
 	ASSERT(e.HasComponent<Direction>(e1));
 
-    /*
-	e.GetComponent<Position>(e1).y = 10;
-	test_debug::examine("changed position.x = 10", e);
-	assert(e.GetComponent<Position>(e1).y == 10);
+	DO(e.GetComponent<Position>(e1).y = 10);
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x50, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A}));
+	ASSERT(e.GetComponent<Position>(e1).y == 10);
 
-	e.RemoveComponent<Direction>(e1);
-	test_debug::examine("component removed (direction)", e);
-	assert(!e.HasComponent<Direction>(e1));
-	assert(e.GetComponent<Position>(e1).y == 10);
+	DO(e.RemoveComponent<Direction>(e1));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A}));
+	ASSERT(!e.HasComponent<Direction>(e1));
+	ASSERT(e.GetComponent<Position>(e1).y == 10);
 
-	ECS::Entity e2 = e.CreateEntity();
-	test_debug::examine("entity 2 created", e);
+	DO(ECS::Entity e2 = e.CreateEntity());
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A, 0x04, 0x00, 0x00, 0x00}));
+	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 0xAF));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xAF}));
 
-	e.AddComponent<Direction, uint8_t>(e2, 0xAF);
-	test_debug::examine("component added to entity 2 (Direction=0xAF)", e);
-
-	e.RemoveAllComponents(e1);
-	test_debug::examine("all components removed from e1", e);
+	DO(e.RemoveAllComponents(e1));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xAF}));
 
 	cout << "------------------------------\n\n";
 
-	e.Reset();
-	test_debug::examine("empty engine", e);
+	DO(e.Reset());
 
-	e1 = e.CreateEntity();
-	e2 = e.CreateEntity();
-	test_debug::examine("two entities created", e);
-
-	e.AddComponent<Direction, uint8_t>(e1, 0xFB);
-	test_debug::examine("direction added to e1", e);
-
-	e.AddComponent<Position, uint8_t, uint8_t>(e1, 4, 5);
-	test_debug::examine("position added to e1", e);
-
-	e.AddComponent<Direction, uint8_t>(e2, 0xAB);
-	test_debug::examine("direction added to e2", e);
+    // add component to middle of list
+	DO(e1 = e.CreateEntity(); e2 = e.CreateEntity());
+    EXPECT(M({0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00}));
+	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
+    EXPECT(M({0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x04, 0x00, 0x00, 0x00}));
+	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x06, 0x00, 0x00, 0x00, 0x04, 0x05, 0x04, 0x00, 0x00, 0x00}));
+	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x06, 0x00, 0x00, 0x00, 0x04, 0x05, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x7B}));
 
 	cout << "------------------------------\n\n";
 
-    e.Reset();
-	e1 = e.CreateEntity();
-	test_debug::examine("entity 1 created", e);
+    // reuse component
+    DO(e.Reset(); e1 = e.CreateEntity());
+    EXPECT(M({0x04, 0x00, 0x00, 0x00}));
+	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 50); e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x32, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
+	DO(e.RemoveComponent<Direction>(e1));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
+	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 24));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x18, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
 
-	e.AddComponent<Direction, uint8_t>(e1, 0x50);
-	e.AddComponent<Position, uint8_t, uint8_t>(e1, 7, 8);
-	test_debug::examine("component added (Direction=0x50, Position x=7, y=8)", e);
-	
-	e.RemoveComponent<Direction>(e1);
-	test_debug::examine("direction removed", e);
-	
-	e.AddComponent<Direction, uint8_t>(e1, 0x24);
-	test_debug::examine("direction readded", e);  // TODO - reuse component
+    // reuse entity
+    DO(e2 = e.CreateEntity(); e.AddComponent<M(Direction, uint8_t)>(e2, 22));
+    EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x18, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x16}));
+    DO(e.RemoveEntity(e1));
+    EXPECT(M({0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x16}));
 
 	cout << "------------------------------\n\n";
-    */
-
-	// TODO - reuse entity
 	
 	// TODO - iteration
 	
