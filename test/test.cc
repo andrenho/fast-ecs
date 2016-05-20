@@ -18,6 +18,15 @@ struct Direction {
 	Direction(uint8_t d) : angle(d) {}
 };
 
+#define KNRM  "\x1B[0m"
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KYEL  "\x1B[33m"
+#define KBLU  "\x1B[34m"
+#define KMAG  "\x1B[35m"
+#define KCYN  "\x1B[36m"
+#define KWHT  "\x1B[37m"
+
 struct test_debug {
 	template<typename E>
 	static void examine(string const& s, E const& e) {
@@ -27,11 +36,44 @@ struct test_debug {
 		cout << "]\n";
 
 		cout << "  _component_index: [ ";
-		for(auto const& i: e._components) { 
-			cout << hex << uppercase << setfill('0') << setw(2);
-			cout << static_cast<int>(i) << " "; 
-		}
-		cout << "]\n\n";
+        size_t i = 0;
+        while(i < e._components.size()) {
+
+            // entity size
+            cout << KNRM;
+            uint32_t sz; memcpy(&sz, &e._components[i], sizeof(uint32_t));
+            for(size_t j=0; j<sizeof(uint32_t); ++i, ++j) {
+                cout << hex << uppercase << setfill('0') << setw(2) << static_cast<int>(e._components[i]) << " "; 
+            }
+
+            if(i == e._components.size()) {
+                break;
+            }
+            
+            // component size
+            size_t j = i;
+            while(j < (i+sz-sizeof(uint32_t))) {
+                uint16_t csz; memcpy(&csz, &e._components[j], sizeof(uint16_t));
+                csz = csz - 2*sizeof(uint16_t);
+
+                cout << KBLU;
+                for(size_t k=0; k<sizeof(uint16_t); ++j, ++k) {
+                    cout << hex << uppercase << setfill('0') << setw(2) << static_cast<int>(e._components[j]) << " "; 
+                }
+
+                cout << KMAG;
+                for(size_t k=0; k<sizeof(uint16_t); ++j, ++k) {
+                    cout << hex << uppercase << setfill('0') << setw(2) << static_cast<int>(e._components[j]) << " "; 
+                }
+
+                cout << KGRN;
+                for(size_t k=0; k<csz; ++j, ++k) {
+                    cout << hex << uppercase << setfill('0') << setw(2) << static_cast<int>(e._components[j]) << " "; 
+                }
+            }
+            i = j;
+        }
+		cout << KNRM "]\n\n";
 	}
 };
 
