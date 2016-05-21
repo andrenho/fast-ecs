@@ -42,3 +42,13 @@ C&   GetComponent<C>(Entity ent);        // return a reference to a component
 // When getting a component, it can be edited directly:
 e.GetComponent<Position>().x = 10;
 ```
+
+Iterating over entities: 
+```C++
+void ForEach<C...>([](ECS::Entity, ...);
+
+// Example:
+e.ForEach<Position, Direction>([](ECS::Entity ent, Position& pos, Direction& dir) {
+    // do something
+});
+```
