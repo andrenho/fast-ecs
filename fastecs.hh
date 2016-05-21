@@ -92,15 +92,15 @@ public:
     //
     Entity CreateEntity() {{{
         // add a new entity to the index
-		_entity_index.push_back(_components.size());
+        _entity_index.push_back(_components.size());
 
         // resize component vector to open space for the new entity size
-		_components.resize(_components.size() + sizeof(entity_size_t), 0);
+        _components.resize(_components.size() + sizeof(entity_size_t), 0);
 
         // set size to 4 (or other size)
         SetEntitySize(_components.size() - sizeof(entity_size_t), sizeof(entity_size_t));
-		return _entity_index.size() - 1;
-	}}}
+        return _entity_index.size() - 1;
+    }}}
 
     void RemoveEntity(Entity e) {{{
         // find index
@@ -133,57 +133,57 @@ public:
                 ++total;
             }
         }
-		return total;
-	}}}
+        return total;
+    }}}
 
     //
     // COMPONENT MANAGEMENT
     //
     template<typename C, typename... P> C& AddComponent(Entity entity, P... pars) {{{
-		// assertions
-		static_assert(sizeof(C) <= std::numeric_limits<component_size_t>::max(), 
+        // assertions
+        static_assert(sizeof(C) <= std::numeric_limits<component_size_t>::max(), 
                 "Component size > maximum component size");
-		static_assert(C::_COMP_ID <= std::numeric_limits<component_id_t>::max(), 
+        static_assert(C::_COMP_ID <= std::numeric_limits<component_id_t>::max(), 
                 "Component ID > maximum component id");
         static_assert(C::_COMP_ID != COMPONENT_DELETED, 
                 "Please do not use the maximum value as the component ID - this is reserved for deleted components.");
 
-		// find entity index
-		assert(entity < _entity_index.size());
-		size_t idx = _entity_index[entity];
+        // find entity index
+        assert(entity < _entity_index.size());
+        size_t idx = _entity_index[entity];
         if(idx == ENTITY_DELETED) {
             throw std::runtime_error("Entity was deleted.");
         }
 
-		// find entity current size
+        // find entity current size
         entity_size_t sz = GetEntitySize(idx);
 
-		// calculate new size
-		size_t extend_size = sizeof(component_size_t) + sizeof(component_id_t) + sizeof(C);
-		if(sz + extend_size >= std::numeric_limits<entity_size_t>::max()) {
-			throw std::runtime_error("Entity size exceeded.");
-		}
+        // calculate new size
+        size_t extend_size = sizeof(component_size_t) + sizeof(component_id_t) + sizeof(C);
+        if(sz + extend_size >= std::numeric_limits<entity_size_t>::max()) {
+            throw std::runtime_error("Entity size exceeded.");
+        }
 
         // can we reuse an existing, deleted component in this entity?
         size_t comp_pos = FindUnusedComponent(idx, &extend_size);
         if(comp_pos == UNUSED_COMPONENT_NOT_FOUND) {
             // open space
-		    comp_pos = CreateSpace(idx + sz, extend_size, entity);
+            comp_pos = CreateSpace(idx + sz, extend_size, entity);
             sz += static_cast<entity_size_t>(extend_size);
         }
-		
-		// change entity size
+        
+        // change entity size
         SetEntitySize(idx, sz);
 
-		// add component size and type
+        // add component size and type
         SetComponentSize(comp_pos, static_cast<component_size_t>(extend_size));
         SetComponentId(comp_pos + sizeof(component_size_t), static_cast<component_id_t>(C::_COMP_ID));
 
-		// initialize component and copy it to the vector
-		size_t pos = comp_pos + sizeof(component_size_t) + sizeof(component_id_t);
-		C component(pars...);
+        // initialize component and copy it to the vector
+        size_t pos = comp_pos + sizeof(component_size_t) + sizeof(component_id_t);
+        C component(pars...);
         return SetComponentData<C>(pos, component);
-	}}}
+    }}}
 
     template<typename C> void RemoveComponent(Entity entity) {{{
         FindComponent<void*, C>(entity, 
@@ -206,14 +206,14 @@ public:
 
     void RemoveAllComponents(Entity entity) {{{
         // find index
-		assert(entity < _entity_index.size());
-		size_t idx = _entity_index[entity];
+        assert(entity < _entity_index.size());
+        size_t idx = _entity_index[entity];
         if(idx == ENTITY_DELETED) {
             throw std::runtime_error("Entity was deleted.");
         }
 
-		// find entity size
-		entity_size_t sz = GetEntitySize(idx);
+        // find entity size
+        entity_size_t sz = GetEntitySize(idx);
 
         // find component
         entity_size_t i = static_cast<entity_size_t>(idx + sizeof(entity_size_t));
@@ -253,7 +253,7 @@ public:
                     throw std::runtime_error("Entity does not contain this component.\n");
                 }
         );
-	}}}
+    }}}
 
     template<typename C> C& GetComponent(Entity entity) {{{
         // call the const version of this method
@@ -383,12 +383,12 @@ public:
     // PRIVATE
     //
 private:
-	std::vector<size_t>  _entity_index = {};
-	std::vector<uint8_t> _components = {};
+    std::vector<size_t>  _entity_index = {};
+    std::vector<uint8_t> _components = {};
     std::vector<std::unique_ptr<System>> _systems = {};
 
     size_t FindUnusedComponent(size_t idx, size_t *extend_size) {{{
-		entity_size_t sz = GetComponentSize(idx);
+        entity_size_t sz = GetComponentSize(idx);
         size_t i = idx + sizeof(entity_size_t);
         while(i < (idx + sz)) {
             component_id_t id = GetComponentId(i + sizeof(component_size_t));
@@ -404,7 +404,7 @@ private:
         return UNUSED_COMPONENT_NOT_FOUND;
     }}}
 
-	size_t CreateSpace(size_t pos, size_t sz, Entity entity) {{{
+    size_t CreateSpace(size_t pos, size_t sz, Entity entity) {{{
         _components.insert(begin(_components) + pos, sz, 0);
         for(Entity e=entity+1; e < _entity_index.size(); ++e) {
             if(_entity_index[e] != std::numeric_limits<size_t>::max()) {
@@ -412,15 +412,15 @@ private:
             }
         }
         return pos;
-	}}}
+    }}}
 
     template<typename R, typename C, typename F1, typename F2> R FindComponent(Entity entity, F1 const& if_found, F2 const& if_not_found) const {{{
         // find index
-		assert(entity < _entity_index.size());
-		size_t idx = _entity_index[entity];
+        assert(entity < _entity_index.size());
+        size_t idx = _entity_index[entity];
 
-		// find entity size
-		entity_size_t sz = GetEntitySize(idx);
+        // find entity size
+        entity_size_t sz = GetEntitySize(idx);
 
         // find component
         entity_size_t i = static_cast<entity_size_t>(idx + sizeof(entity_size_t));
@@ -447,13 +447,13 @@ private:
     }
     
     entity_size_t GetEntitySize(size_t idx) const {
-		entity_size_t sz = 0;
-		memcpy(&sz, &_components[idx], sizeof(entity_size_t));
+        entity_size_t sz = 0;
+        memcpy(&sz, &_components[idx], sizeof(entity_size_t));
         return sz;
     }
 
     void SetComponentSize(size_t pos, component_size_t sz) {
-		memcpy(&_components[pos], &sz, sizeof(component_size_t));
+        memcpy(&_components[pos], &sz, sizeof(component_size_t));
     }
 
     component_size_t GetComponentSize(size_t pos) const {
@@ -463,7 +463,7 @@ private:
     }
 
     void SetComponentId(size_t pos, component_id_t id) {
-		memcpy(&_components[pos], &id, sizeof(component_id_t));
+        memcpy(&_components[pos], &id, sizeof(component_id_t));
     }
 
     component_id_t GetComponentId(size_t pos) const {
@@ -473,7 +473,7 @@ private:
     }
 
     template<typename C> C& SetComponentData(size_t pos, C& component) {
-		memcpy(&_components[pos], &component, sizeof(C));
+        memcpy(&_components[pos], &component, sizeof(C));
         return *reinterpret_cast<C*>(&_components[pos]);
     }
 

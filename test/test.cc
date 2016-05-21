@@ -8,16 +8,16 @@
 using namespace std;
 
 struct Position {
-	COMP_ID(0x0);
-	uint8_t x, y;
-	Position(uint8_t x, uint8_t y) : x(x), y(y) {}
+    COMP_ID(0x0);
+    uint8_t x, y;
+    Position(uint8_t x, uint8_t y) : x(x), y(y) {}
     string to_str() const { return "Position: " + to_string(static_cast<int>(x)) + ", " + to_string(static_cast<int>(y)); }
 };
 
 struct Direction {
-	COMP_ID(0x1);
-	uint8_t angle;
-	Direction(uint8_t d) : angle(d) {}
+    COMP_ID(0x1);
+    uint8_t angle;
+    Direction(uint8_t d) : angle(d) {}
     string to_str() const { return "Direction: " + to_string(static_cast<int>(angle)); }
 };
 
@@ -31,12 +31,12 @@ struct Direction {
 #define KWHT  "\x1B[37m"
 
 struct test_debug {
-	static void examine(ECS::Engine<> const& e) {
-		cout << "  _entity_index:    [ ";
-		for(auto const& i: e._entity_index) { cout << i << " "; }
-		cout << "]\n";
+    static void examine(ECS::Engine<> const& e) {
+        cout << "  _entity_index:    [ ";
+        for(auto const& i: e._entity_index) { cout << i << " "; }
+        cout << "]\n";
 
-		cout << "  _component_index: [ ";
+        cout << "  _component_index: [ ";
         size_t i = 0;
         while(i < e._components.size()) {
 
@@ -74,9 +74,9 @@ struct test_debug {
             }
             i = j;
         }
-		cout << KNRM "]\n";
+        cout << KNRM "]\n";
         cout << e.Examine<Direction, Position>() << "\n";
-	}
+    }
 };
 
 #define M(...) __VA_ARGS__
@@ -92,49 +92,49 @@ int main()
     cout << "BASIC TESTS\n";
     cout << "----------------------\n";
 
-	DO(ECS::Engine<> e);
+    DO(ECS::Engine<> e);
     EXPECT({});
     DO(ECS::Entity e1 = e.CreateEntity());
     EXPECT(M({0x04, 0x00, 0x00, 0x00}));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 0x50));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e1, 0x50));
     EXPECT(M({0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x50}));
-	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
+    DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x50, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
 
-	ASSERT(e.GetComponent<Position>(e1).y == 8);
-	ASSERT(e.GetComponent<Direction>(e1).angle == 0x50);
-	ASSERT(e.HasComponent<Direction>(e1));
+    ASSERT(e.GetComponent<Position>(e1).y == 8);
+    ASSERT(e.GetComponent<Direction>(e1).angle == 0x50);
+    ASSERT(e.HasComponent<Direction>(e1));
 
-	DO(e.GetComponent<Position>(e1).y = 10);
+    DO(e.GetComponent<Position>(e1).y = 10);
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x50, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A}));
-	ASSERT(e.GetComponent<Position>(e1).y == 10);
+    ASSERT(e.GetComponent<Position>(e1).y == 10);
 
-	DO(e.RemoveComponent<Direction>(e1));
+    DO(e.RemoveComponent<Direction>(e1));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A}));
-	ASSERT(!e.HasComponent<Direction>(e1));
-	ASSERT(e.GetComponent<Position>(e1).y == 10);
+    ASSERT(!e.HasComponent<Direction>(e1));
+    ASSERT(e.GetComponent<Position>(e1).y == 10);
 
-	DO(ECS::Entity e2 = e.CreateEntity());
+    DO(ECS::Entity e2 = e.CreateEntity());
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A, 0x04, 0x00, 0x00, 0x00}));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 0xAF));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e2, 0xAF));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x0A, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xAF}));
 
-	DO(e.RemoveAllComponents(e1));
+    DO(e.RemoveAllComponents(e1));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xAF}));
 
     cout << "----------------------\n";
     cout << "ADD TO THE MIDDLE\n";
     cout << "----------------------\n";
 
-	DO(e.Reset());
+    DO(e.Reset());
 
-	DO(e1 = e.CreateEntity(); e2 = e.CreateEntity());
+    DO(e1 = e.CreateEntity(); e2 = e.CreateEntity());
     EXPECT(M({0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00}));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
     EXPECT(M({0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x04, 0x00, 0x00, 0x00}));
-	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
+    DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x06, 0x00, 0x00, 0x00, 0x04, 0x05, 0x04, 0x00, 0x00, 0x00}));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x06, 0x00, 0x00, 0x00, 0x04, 0x05, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x7B}));
 
     cout << "-------------------------\n";
@@ -143,11 +143,11 @@ int main()
 
     DO(e.Reset(); e1 = e.CreateEntity());
     EXPECT(M({0x04, 0x00, 0x00, 0x00}));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 50); e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e1, 50); e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x32, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
-	DO(e.RemoveComponent<Direction>(e1));
+    DO(e.RemoveComponent<Direction>(e1));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 24));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e1, 24));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x18, 0x06, 0x00, 0x00, 0x00, 0x07, 0x08}));
 
     // reuse entity
@@ -160,10 +160,10 @@ int main()
     cout << "ITERATIONS\n";
     cout << "----------------------\n";
 
-	DO(e.Reset(); e1 = e.CreateEntity(); e2 = e.CreateEntity());
-	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
-	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
-	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
+    DO(e.Reset(); e1 = e.CreateEntity(); e2 = e.CreateEntity());
+    DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
+    DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
+    DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
 
     size_t i = 0;
     DO(e.ForEach<Direction>([&i](ECS::Engine<>&, ECS::Entity, Direction&) { ++i; }));
@@ -172,7 +172,7 @@ int main()
     i = 0;
     DO(e.ForEach<Position>([&i](ECS::Engine<>&, ECS::Entity, Position& p) { ++i; ASSERT(p.x == 4); }));
     ASSERT(i == 1);
-	
+    
     i = 0;
     DO(e.ForEach<M(Position, Direction)>([&i](ECS::Engine<>&, ECS::Entity, Position& p, Direction&) { ++i; ASSERT(p.x == 4); }));
     ASSERT(i == 1);
@@ -180,7 +180,7 @@ int main()
     i = 0;
     DO(e.ForEach([&i](ECS::Engine<>&, ECS::Entity){ ++i; }));
     ASSERT(i == 2);
-	
+    
     cout << "----------------------\n";
     cout << "SPEED\n";
     cout << "----------------------\n";
@@ -227,7 +227,7 @@ int main()
     cout << "SYSTEMS\n";
     cout << "----------------------\n";
 
-	struct TestSystem : public ECS::System {
+    struct TestSystem : public ECS::System {
         TestSystem(int i) : i(i) {}
         void Execute() { ASSERT(i == 2); }
         int i;
