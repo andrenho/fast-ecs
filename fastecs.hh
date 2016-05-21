@@ -90,12 +90,12 @@ public:
         _systems.clear();      _systems.shrink_to_fit();
     }}}
 
-    ~Engine() {
+    ~Engine() {{{
         for(auto it = _systems.rbegin(); it != _systems.rend(); ++it) {
             delete *it;
         }
         _systems.clear();
-    }
+    }}}
 
     //
     // ENTITY MANAGEMENT

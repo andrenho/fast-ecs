@@ -77,8 +77,15 @@ int main()
         sys->Execute(e);
     }
 }
-```
 
+
+/* Result:
+
+Entity 0 position.x was 20 but now is 21.
+Entity 1 position.x was 100 but now is 101.
+Entity 0 direction is 1.2.
+*/
+```
 
 # API
 
