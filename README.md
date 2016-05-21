@@ -1,7 +1,7 @@
 # fast-ecs
 A C++14, fast, cache-friendly, storage-wise, header-only Entity Component System library.
 
-Download here.
+[Download the header here.](https://raw.githubusercontent.com/andrenho/fast-ecs/master/fastecs.hh)
 
 Features.
 
