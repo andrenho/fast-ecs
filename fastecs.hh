@@ -166,7 +166,7 @@ public:
         SetEntitySize(idx, sz);
 
 		// add component size and type
-        SetComponentSize(comp_pos, extend_size);
+        SetComponentSize(comp_pos, static_cast<component_size_t>(extend_size));
         SetComponentId(comp_pos + sizeof(component_size_t), static_cast<component_id_t>(C::_COMP_ID));
 
 		// initialize component and copy it to the vector
@@ -253,7 +253,15 @@ public:
     //
     // ITERATING
     //
-    template<typename F, typename... C> void ForEach(F const& f) {}
+    template<typename... C, typename F> void ForEach(F const& f) {{{
+        Entity idx = 0;
+
+        while(idx < _components.size()) {
+            entity_size_t esz = GetEntitySize(idx);
+
+            idx += esz;
+        }
+    }}}
 
     // {{{ DEBUGGING
 #ifdef DEBUG
