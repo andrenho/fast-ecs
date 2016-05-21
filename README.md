@@ -21,9 +21,10 @@ size_t EntityCount();              // return the number of entities
 
 Component management:
 
-Every component is a class/struct must contain a unique ID. Example:
 
 ```C++
+// Every component is a class/struct must contain a unique ID. Example:
+
 struct Position {
     double x, y;
     COMP_ID(1);    // a different identifier must be set for each component
@@ -34,4 +35,7 @@ struct Position {
 C&   AddComponent<C>(Entity ent, ...);   // add a new component to an entity, calling its constructor
 void RemoveComponent<C>(Entity ent);     // remove component from entity
 void RemoveAllComponents();              // clear an entity (good for entity reuse without deleting)
+
+bool HasComponent<C>(Entity ent);        // return true if entity contains a component
+C&   GetComponent<C>(Entity ent);        // return a reference to a component
 ```
