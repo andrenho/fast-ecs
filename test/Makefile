@@ -16,7 +16,7 @@ test-fast-ecs: test.o
 #example: example.o
 #	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-test.o: test.cc #../fastecs.hh
+test.o: test.cc ../fastecs.hh
 
 #example.o: example.cc ../fastecs.hh
 
