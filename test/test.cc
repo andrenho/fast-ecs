@@ -231,9 +231,9 @@ int main()
     cout << "SYSTEMS\n";
     cout << "----------------------\n";
 
-    struct TestSystem : public ECS::System {
+    struct TestSystem : public ECS::System<> {
         TestSystem(int i) : i(i) {}
-        void Execute() { ASSERT(i == 2); }
+        void Execute(ECS::Engine<>& e) override { ASSERT(i == 2); }
         int i;
     };
     e.AddSystem<TestSystem>(2);

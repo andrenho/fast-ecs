@@ -61,9 +61,12 @@ namespace ECS {
 
 typedef size_t Entity;
 
+template<typename entity_size_t, typename component_size_t, typename component_id_t> class Engine;
+
+template<typename entity_size_t=uint32_t, typename component_size_t=uint16_t, typename component_id_t=uint16_t>
 class System {
 public:
-    template<typename E> void Execute(E& e);
+    virtual void Execute(class Engine<entity_size_t, component_size_t, component_id_t>&) {}
     virtual ~System() {}
 protected:
     System() {}
@@ -412,7 +415,8 @@ public:
         throw std::runtime_error("System not found.");
     }
 
-    std::vector<System*> const& Systems() const { return _systems; }
+    std::vector<System<entity_size_t,component_size_t,component_id_t>*> const& Systems() const { return _systems; }
+
     // }}}
 
     // 
@@ -421,7 +425,7 @@ public:
 private:
     std::vector<size_t>  _entity_index = {};
     std::vector<uint8_t> _components = {};
-    std::vector<System*> _systems = {};
+    std::vector<System<entity_size_t,component_size_t,component_id_t>*> _systems = {};
 
     size_t FindUnusedComponent(size_t idx, size_t *extend_size) {{{
         entity_size_t sz = GetComponentSize(idx);

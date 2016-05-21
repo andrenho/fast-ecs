@@ -23,6 +23,6 @@ lint:
 	clang-tidy ../fastecs.hh "-checks=*,-google-build-using-namespace,-google-readability-todo" -- --std=c++14
 
 clean:
-	$(RM) test.o test-fast-ecs
+	$(RM) *.o test-fast-ecs
 
 .PHONY: clean lint
