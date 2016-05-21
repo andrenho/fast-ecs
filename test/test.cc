@@ -87,6 +87,10 @@ struct test_debug {
 
 int main()
 {
+    cout << "----------------------\n";
+    cout << "BASIC TESTS\n";
+    cout << "----------------------\n";
+
 	DO(ECS::Engine<> e);
     EXPECT({});
     DO(ECS::Entity e1 = e.CreateEntity());
@@ -117,11 +121,12 @@ int main()
 	DO(e.RemoveAllComponents(e1));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0xFF, 0xFF, 0x00, 0x06, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xAF}));
 
-	cout << "------------------------------\n\n";
+    cout << "----------------------\n";
+    cout << "ADD TO THE MIDDLE\n";
+    cout << "----------------------\n";
 
 	DO(e.Reset());
 
-    // add component to middle of list
 	DO(e1 = e.CreateEntity(); e2 = e.CreateEntity());
     EXPECT(M({0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00}));
 	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
@@ -131,9 +136,10 @@ int main()
 	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
     EXPECT(M({0x0F, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0xDD, 0x06, 0x00, 0x00, 0x00, 0x04, 0x05, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x7B}));
 
-	cout << "------------------------------\n\n";
+    cout << "-------------------------\n";
+    cout << "REUSE ENTITIES/COMPONENTS\n";
+    cout << "-------------------------\n";
 
-    // reuse component
     DO(e.Reset(); e1 = e.CreateEntity());
     EXPECT(M({0x04, 0x00, 0x00, 0x00}));
 	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 50); e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 7, 8));
@@ -149,10 +155,23 @@ int main()
     DO(e.RemoveEntity(e1));
     EXPECT(M({0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x16}));
 
-	cout << "------------------------------\n\n";
+    cout << "----------------------\n";
+    cout << "ITERATIONS\n";
+    cout << "----------------------\n";
+
+	DO(e1 = e.CreateEntity(); e2 = e.CreateEntity());
+	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
+	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
+	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
+
+    size_t i = 0;
+    DO(e.ForEach<Direction>([&i](ECS::Engine<>&, ECS::Entity, Direction&) { ++i; }));
+    ASSERT(i == 2);
 	
-	// TODO - iteration
-	
+    cout << "----------------------\n";
+    cout << "SYSTEMS\n";
+    cout << "----------------------\n";
+
 	// TODO - systems
 }
 

@@ -250,18 +250,49 @@ public:
         return const_cast<C&>(static_cast<Engine const*>(this)->GetComponent<C>(entity));
     }}}
 
-    //
-    // ITERATING
-    //
-    template<typename... C, typename F> void ForEach(F const& f) {{{
-        Entity idx = 0;
+    // {{{ ITERATING
 
+    template<typename... C, typename F> void ForEach(F const& f) {
+        size_t idx = 0;
+        Entity entity = 0;
+
+        // iterate each entity
         while(idx < _components.size()) {
             entity_size_t esz = GetEntitySize(idx);
 
+            // call the used function
+            f(*this, entity, ForEachParameter<C>(idx, esz)...);
+
+            // advance index pointer to the next entity
             idx += esz;
+            ++entity;
         }
-    }}}
+    }
+    
+private:
+    template<typename C> C& ForEachParameter(size_t idx, entity_size_t esz) {
+        size_t stop = idx + esz;
+        idx += sizeof(entity_size_t);
+
+        // iterate each component
+        while(idx < stop) {
+            
+            // check if it's the correct ID
+            component_id_t id = GetComponentId(idx + sizeof(component_size_t));
+            if(id == static_cast<component_id_t>(C::_COMP_ID)) {
+                return *reinterpret_cast<C*>(&_components[idx + sizeof(component_size_t) + sizeof(component_id_t)]);
+            }
+
+            // if not, advance index pointer to the next component
+            component_size_t csz = GetComponentSize(idx);
+            idx += csz;
+        }
+        abort(); // TODO - throw exception?
+    }
+
+public:
+
+    // }}}
 
     // {{{ DEBUGGING
 #ifdef DEBUG
