@@ -1,5 +1,3 @@
-// TODO - remove Engine from ForEach, remove System
-
 /* ENGINE INTERFACE
 
   Entity management:
@@ -47,7 +45,6 @@
 #include <cstring>
 #include <cstdio>
 #include <limits>
-#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -65,10 +62,11 @@ namespace ECS {
 typedef size_t Entity;
 
 class System {
+public:
+    template<typename E> void Execute(E& e);
+    virtual ~System() {}
 protected:
     System() {}
-public:
-    virtual ~System() {}
 };
 
 template<typename entity_size_t=uint32_t, typename component_size_t=uint16_t, typename component_id_t=uint16_t>
@@ -88,6 +86,13 @@ public:
         _entity_index.clear(); _entity_index.shrink_to_fit();
         _systems.clear();      _systems.shrink_to_fit();
     }}}
+
+    ~Engine() {
+        for(auto it = _systems.rbegin(); it != _systems.rend(); ++it) {
+            delete *it;
+        }
+        _systems.clear();
+    }
 
     //
     // ENTITY MANAGEMENT
@@ -283,7 +288,7 @@ public:
 
             // Call the user function. `val` is 0 when the component is found.
             if(val == 0) {
-                user_function(*this, entity, ForEachParameter<C>(idx, esz, env_buffer)...);
+                user_function(entity, ForEachParameter<C>(idx, esz, env_buffer)...);
             }
 
             // advance index pointer to the next entity
@@ -292,8 +297,33 @@ public:
         }
     }
     
+    // copy of the function above, just const
+    template<typename... C, typename F> void ForEach(F const& user_function) const {
+        size_t idx = 0;
+        Entity entity = 0;
+
+        // iterate each entity
+        while(idx < _components.size()) {
+            entity_size_t esz = GetEntitySize(idx);
+
+            // Here, we prepare for a longjmp. If the component C is not found
+            // when ForEachParameter is called, it calls longjmp, which skips
+            // calling the user function.
+            jmp_buf env_buffer;
+            int val = setjmp(env_buffer);
+
+            // Call the user function. `val` is 0 when the component is found.
+            if(val == 0) {
+                user_function(entity, ForEachParameter<C>(idx, esz, env_buffer)...);
+            }
+
+            // advance index pointer to the next entity
+            idx += esz;
+            ++entity;
+        }
+    }
 private:
-    template<typename C> C& ForEachParameter(size_t idx, entity_size_t esz, jmp_buf env_buffer) {
+    template<typename C> C const& ForEachParameter(size_t idx, entity_size_t esz, jmp_buf env_buffer) const {
         size_t stop = idx + esz;
         idx += sizeof(entity_size_t);
 
@@ -303,7 +333,7 @@ private:
             // check if it's the correct ID
             component_id_t id = GetComponentId(idx + sizeof(component_size_t));
             if(id == static_cast<component_id_t>(C::_COMP_ID)) {
-                return *reinterpret_cast<C*>(&_components[idx + sizeof(component_size_t) + sizeof(component_id_t)]);
+                return *reinterpret_cast<C const*>(&_components[idx + sizeof(component_size_t) + sizeof(component_id_t)]);
             }
 
             // if not, advance index pointer to the next component
@@ -314,6 +344,10 @@ private:
         // component was not found, so we longjmp, so that the function
         // is not executed
         longjmp(env_buffer, 1);
+    }
+
+    template<typename C> C& ForEachParameter(size_t idx, entity_size_t esz, jmp_buf env_buffer) {
+        return const_cast<C&>(static_cast<Engine const*>(this)->ForEachParameter<C>(idx, esz, env_buffer));
     }
 
 public:
@@ -364,13 +398,13 @@ public:
     // {{{ Manage systems
 
     template<typename S, typename... P> S& AddSystem(P ...pars) {
-        _systems.push_back(std::make_unique<S>(pars...));
-        return *static_cast<S*>(_systems.back().get());
+        _systems.push_back(new S(pars...));
+        return *static_cast<S*>(_systems.back());
     }
 
     template<typename S> S& GetSystem() {
         for(auto& sys: _systems) {
-            S* s = dynamic_cast<S*>(sys.get());
+            S* s = dynamic_cast<S*>(sys);
             if(s) {
                 return *s;
             }
@@ -378,7 +412,7 @@ public:
         throw std::runtime_error("System not found.");
     }
 
-    std::vector<std::unique_ptr<System>> const& Systems() const { return _systems; }
+    std::vector<System*> const& Systems() const { return _systems; }
     // }}}
 
     // 
@@ -387,7 +421,7 @@ public:
 private:
     std::vector<size_t>  _entity_index = {};
     std::vector<uint8_t> _components = {};
-    std::vector<std::unique_ptr<System>> _systems = {};
+    std::vector<System*> _systems = {};
 
     size_t FindUnusedComponent(size_t idx, size_t *extend_size) {{{
         entity_size_t sz = GetComponentSize(idx);

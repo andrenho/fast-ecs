@@ -43,7 +43,8 @@ C&   GetComponent<C>(Entity ent);        // return a reference to a component
 e.GetComponent<Position>().x = 10;
 ```
 
-Iterating overall entities: 
+Iterating over entities: 
+
 ```C++
 void ForEach<C...>([](ECS::Entity, ...);
 
@@ -53,4 +54,23 @@ e.ForEach<Position, Direction>([](ECS::Entity ent, Position& pos, Direction& dir
 });
 ```
 
+Systems:
 
+```C++
+// all systems must inherit from ECS::System
+struct MySystem : public ECS::System {
+    template <typename E> void Execute(E& e) {
+        // do something
+    }
+};
+
+System&         AddSystem<S>(...);    // add a new system (call constructor)
+System&         GetSystem<S>();       // return a reference to a system
+vector<System*> Systems();            // return a vector of systems to iterate, example:
+
+for(auto& sys: e.Systems()) {
+    sys->Execute(e);
+}
+```
+
+You can only add one system of each type (class).

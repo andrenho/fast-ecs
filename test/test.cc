@@ -166,20 +166,24 @@ int main()
     DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
 
     size_t i = 0;
-    DO(e.ForEach<Direction>([&i](ECS::Engine<>&, ECS::Entity, Direction&) { ++i; }));
+    DO(e.ForEach<Direction>([&i](ECS::Entity, Direction&) { ++i; }));
     ASSERT(i == 2);
 
     i = 0;
-    DO(e.ForEach<Position>([&i](ECS::Engine<>&, ECS::Entity, Position& p) { ++i; ASSERT(p.x == 4); }));
+    DO(e.ForEach<Position>([&i](ECS::Entity, Position& p) { ++i; ASSERT(p.x == 4); }));
     ASSERT(i == 1);
     
     i = 0;
-    DO(e.ForEach<M(Position, Direction)>([&i](ECS::Engine<>&, ECS::Entity, Position& p, Direction&) { ++i; ASSERT(p.x == 4); }));
+    DO(e.ForEach<M(Position, Direction)>([&i](ECS::Entity, Position& p, Direction&) { ++i; ASSERT(p.x == 4); }));
     ASSERT(i == 1);
 
     i = 0;
-    DO(e.ForEach([&i](ECS::Engine<>&, ECS::Entity){ ++i; }));
+    DO(e.ForEach([&i](ECS::Entity){ ++i; }));
     ASSERT(i == 2);
+
+    i = 0;
+    DO(ECS::Engine<> const& f = e; f.ForEach<Position>([&i](ECS::Entity, Position const& p) { ++i; ASSERT(p.x == 4); }));
+    ASSERT(i == 1);
     
     cout << "----------------------\n";
     cout << "SPEED\n";
@@ -198,7 +202,7 @@ int main()
 
     auto start = chrono::system_clock::now();
     volatile double x;
-    e.ForEach<Position>([&](ECS::Engine<>&, ECS::Entity, Position& pos) {
+    e.ForEach<Position>([&](ECS::Entity, Position& pos) {
         x = pos.x;
     });
 
@@ -216,7 +220,7 @@ int main()
     }
 
     start = chrono::system_clock::now();
-    e.ForEach<Position>([&](ECS::Engine<>&, ECS::Entity, Position& pos) {
+    e.ForEach<Position>([&](ECS::Entity, Position& pos) {
         x = pos.x;
     });
 
