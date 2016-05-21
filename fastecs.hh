@@ -64,9 +64,6 @@ template<typename entity_size_t=uint32_t, typename component_size_t=uint16_t, ty
 class Engine {
     friend ::test_debug;  // for unit testing
     
-    static constexpr size_t         ENTITY_SIZE_SZ    = sizeof(entity_size_t);
-    static constexpr size_t         COMPONENT_SIZE_SZ = sizeof(component_size_t);
-    static constexpr size_t         COMPONENT_ID_SZ   = sizeof(component_id_t);
     static constexpr Entity         ENTITY_DELETED    = std::numeric_limits<Entity>::max();
     static constexpr component_id_t COMPONENT_DELETED = std::numeric_limits<component_id_t>::max();
     static constexpr size_t         UNUSED_COMPONENT_NOT_FOUND = std::numeric_limits<size_t>::max();
@@ -88,10 +85,10 @@ public:
 		_entity_index.push_back(_components.size());
 
         // resize component vector to open space for the new entity size
-		_components.resize(_components.size() + ENTITY_SIZE_SZ, 0);
+		_components.resize(_components.size() + sizeof(entity_size_t), 0);
 
         // set size to 4 (or other size)
-        SetEntitySize(_components.size() - ENTITY_SIZE_SZ, ENTITY_SIZE_SZ);
+        SetEntitySize(_components.size() - sizeof(entity_size_t), sizeof(entity_size_t));
 		return _entity_index.size() - 1;
 	}}}
 
@@ -152,7 +149,7 @@ public:
         entity_size_t sz = GetEntitySize(idx);
 
 		// calculate new size
-		size_t extend_size = COMPONENT_SIZE_SZ + COMPONENT_ID_SZ + sizeof(C);
+		size_t extend_size = sizeof(component_size_t) + sizeof(component_id_t) + sizeof(C);
 		if(sz + extend_size >= std::numeric_limits<entity_size_t>::max()) {
 			throw std::runtime_error("Entity size exceeded.");
 		}
@@ -170,7 +167,7 @@ public:
 
 		// add component size and type
         SetComponentSize(comp_pos, extend_size);
-        SetComponentId(comp_pos + COMPONENT_SIZE_SZ, static_cast<component_id_t>(C::_COMP_ID));
+        SetComponentId(comp_pos + sizeof(component_size_t), static_cast<component_id_t>(C::_COMP_ID));
 
 		// initialize component and copy it to the vector
 		size_t pos = comp_pos + sizeof(component_size_t) + sizeof(component_id_t);
@@ -182,11 +179,9 @@ public:
         FindComponent<void*, C>(entity, 
                 [&](entity_size_t i, bool& ret) {
                     // set as deleted
-                    component_id_t deleted = std::numeric_limits<component_id_t>::max();
-                    memcpy(&_components[i + sizeof(component_size_t)], &deleted, sizeof(component_id_t));
+                    SetComponentId(i + sizeof(component_size_t), COMPONENT_DELETED);
                     // find component size
-                    component_size_t sz = 0;
-                    memcpy(&sz, &_components[i], sizeof(component_size_t));
+                    component_size_t sz = GetComponentSize(i);
                     sz = static_cast<component_size_t>(sz - sizeof(component_size_t) - sizeof(component_id_t));
                     // clear memory area
                     memset(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)], 0, sz);
@@ -194,8 +189,7 @@ public:
                     ret = true; return nullptr;
                 },
                 []() -> void* {
-                    fprintf(stderr, "Entity does not contain this component.\n");
-                    abort();
+                    throw std::runtime_error("Entity does not contain this component.");
                 }
         );
     }}}
@@ -204,26 +198,25 @@ public:
         // find index
 		assert(entity < _entity_index.size());
 		size_t idx = _entity_index[entity];
+        if(idx == ENTITY_DELETED) {
+            throw std::runtime_error("Entity was deleted.");
+        }
 
 		// find entity size
-		entity_size_t sz = 0;
-		memcpy(&sz, &_components[idx], sizeof(entity_size_t));
+		entity_size_t sz = GetEntitySize(idx);
 
         // find component
         entity_size_t i = static_cast<entity_size_t>(idx + sizeof(entity_size_t));
         while(i < (idx + sz)) {
             // set as deleted
-            component_id_t deleted = std::numeric_limits<component_id_t>::max();
-            memcpy(&_components[i + sizeof(component_size_t)], &deleted, sizeof(component_id_t));
+            SetComponentId(i + sizeof(component_size_t), COMPONENT_DELETED);
             // find component size
-            component_size_t sz = 0;
-            memcpy(&sz, &_components[i], sizeof(component_size_t));
+            component_size_t sz = GetComponentSize(i);
             sz = static_cast<component_size_t>(sz - sizeof(component_size_t) - sizeof(component_id_t));
             // clear memory area
             memset(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)], 0, sz);
            
-            component_size_t csz = 0;
-            memcpy(&csz, &_components[i], sizeof(component_id_t));
+            component_size_t csz = GetComponentSize(i);
             i += csz;
         }
     }}}
@@ -238,8 +231,7 @@ public:
     template<typename C> C const& GetComponent(Entity entity) const {{{
         return FindComponent<C const&, C>(entity, 
                 [&](entity_size_t i, bool& ret) -> C const& {
-                    component_id_t id = 0;
-                    memcpy(&id, &_components[i + sizeof(component_size_t)], sizeof(component_id_t));
+                    component_id_t id = GetComponentId(i + sizeof(component_size_t));
                     if(id == static_cast<component_id_t>(C::_COMP_ID)) {
                         ret = true;
                         return *reinterpret_cast<C const*>(&_components[i + sizeof(component_size_t) + sizeof(component_id_t)]);
@@ -248,8 +240,7 @@ public:
                     return *reinterpret_cast<C const*>(0);  // shouldn't be used
                 },
                 []() -> C& {
-                    fprintf(stderr, "Entity does not contain this component.\n");
-                    abort();
+                    throw std::runtime_error("Entity does not contain this component.\n");
                 }
         );
 	}}}
@@ -304,16 +295,13 @@ private:
 	std::vector<uint8_t> _components = {};
 
     size_t FindUnusedComponent(size_t idx, size_t *extend_size) {{{
-		entity_size_t sz = 0; memcpy(&sz, &_components[idx], sizeof(entity_size_t));
+		entity_size_t sz = GetComponentSize(idx);
         size_t i = idx + sizeof(entity_size_t);
         while(i < (idx + sz)) {
-            component_id_t id = 0;
-            memcpy(&id, &_components[i + sizeof(component_size_t)], sizeof(component_id_t));
-            
-            component_size_t csz = 0;
-            memcpy(&csz, &_components[i], sizeof(component_id_t));
+            component_id_t id = GetComponentId(i + sizeof(component_size_t));
+            component_size_t csz = GetComponentSize(i);
 
-            if(id == std::numeric_limits<component_size_t>::max() && csz <= *extend_size) {
+            if(id == COMPONENT_DELETED && csz <= *extend_size) {
                 *extend_size = csz;
                 return i;
             }
@@ -339,14 +327,12 @@ private:
 		size_t idx = _entity_index[entity];
 
 		// find entity size
-		entity_size_t sz = 0;
-		memcpy(&sz, &_components[idx], sizeof(entity_size_t));
+		entity_size_t sz = GetEntitySize(idx);
 
         // find component
         entity_size_t i = static_cast<entity_size_t>(idx + sizeof(entity_size_t));
         while(i < (idx + sz)) {
-            component_id_t id = 0;
-            memcpy(&id, &_components[i + sizeof(component_size_t)], sizeof(component_id_t));
+            component_id_t id = GetComponentId(i + sizeof(component_size_t));
             if(id == static_cast<component_id_t>(C::_COMP_ID)) {
                 bool r = false;
                 R v = if_found(i, r);
@@ -355,8 +341,7 @@ private:
                 }
             }
            
-            component_size_t csz = 0;
-            memcpy(&csz, &_components[i], sizeof(component_id_t));
+            component_size_t csz = GetComponentSize(i);
             i += csz;
         }
         return if_not_found();   
@@ -365,21 +350,33 @@ private:
     // {{{ GET/SET DATA IN _COMPONENTS
 
     void SetEntitySize(size_t pos, entity_size_t sz) {
-        memcpy(&_components[pos], &sz, ENTITY_SIZE_SZ);
+        memcpy(&_components[pos], &sz, sizeof(entity_size_t));
     }
     
     entity_size_t GetEntitySize(size_t idx) const {
 		entity_size_t sz = 0;
-		memcpy(&sz, &_components[idx], ENTITY_SIZE_SZ);
+		memcpy(&sz, &_components[idx], sizeof(entity_size_t));
         return sz;
     }
 
     void SetComponentSize(size_t pos, component_size_t sz) {
-		memcpy(&_components[pos], &sz, COMPONENT_SIZE_SZ);
+		memcpy(&_components[pos], &sz, sizeof(component_size_t));
+    }
+
+    component_size_t GetComponentSize(size_t pos) const {
+        component_size_t sz = 0;
+        memcpy(&sz, &_components[pos], sizeof(component_size_t));
+        return sz;
     }
 
     void SetComponentId(size_t pos, component_id_t id) {
-		memcpy(&_components[pos], &id, COMPONENT_ID_SZ);
+		memcpy(&_components[pos], &id, sizeof(component_id_t));
+    }
+
+    component_id_t GetComponentId(size_t pos) const {
+        component_id_t id;
+        memcpy(&id, &_components[pos], sizeof(component_id_t));
+        return id;
     }
 
     template<typename C> C& SetComponentData(size_t pos, C& component) {
