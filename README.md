@@ -5,7 +5,7 @@ A C++14 fast, storage-wise, header-only Entity Component System library.
 * fast-ecs is **storage-wise** because it organizes all components in the single array without gaps. This way, no space is wasted.
 * fast-ecs is **header-only** - just include the header below and you're good to go! No need to link to external libraries.
 
-[Download the header here.](https://raw.githubusercontent.com/andrenho/fast-ecs/master/fastecs.hh)
+### [Download the header here.](https://raw.githubusercontent.com/andrenho/fast-ecs/master/fastecs.hh)
 
 # Example
 
