@@ -261,7 +261,9 @@ public:
             entity_size_t esz = GetEntitySize(idx);
 
             // call the used function
-            f(*this, entity, ForEachParameter<C>(idx, esz)...);
+            try {
+                f(*this, entity, ForEachParameter<C>(idx, esz)...);
+            } catch(...) {}
 
             // advance index pointer to the next entity
             idx += esz;
@@ -287,7 +289,7 @@ private:
             component_size_t csz = GetComponentSize(idx);
             idx += csz;
         }
-        abort(); // TODO - throw exception?
+        throw std::exception();
     }
 
 public:

@@ -81,7 +81,7 @@ struct test_debug {
 #define M(...) __VA_ARGS__
 #define DO(s) s; cout << KCYN << #s ";" << KNRM << "\n"; test_debug::examine(e);
 
-#define ASSERT(s) cout << KCYN << #s ";" << KNRM << "\n"; assert(s);
+#define ASSERT(s) cout << KCYN << "assert " #s << KNRM << "\n"; assert(s);
 
 #define EXPECT(v) { if(e.ComponentVector() != vector<uint8_t>(v)) { cout << KRED "Assertion error!\n"; abort(); } }
 
@@ -159,7 +159,7 @@ int main()
     cout << "ITERATIONS\n";
     cout << "----------------------\n";
 
-	DO(e1 = e.CreateEntity(); e2 = e.CreateEntity());
+	DO(e.Reset(); e1 = e.CreateEntity(); e2 = e.CreateEntity());
 	DO(e.AddComponent<M(Direction, uint8_t)>(e1, 221));
 	DO(e.AddComponent<M(Position, uint8_t, uint8_t)>(e1, 4, 5));
 	DO(e.AddComponent<M(Direction, uint8_t)>(e2, 123));
@@ -167,6 +167,14 @@ int main()
     size_t i = 0;
     DO(e.ForEach<Direction>([&i](ECS::Engine<>&, ECS::Entity, Direction&) { ++i; }));
     ASSERT(i == 2);
+
+    i = 0;
+    DO(e.ForEach<Position>([&i](ECS::Engine<>&, ECS::Entity, Position& p) { ++i; ASSERT(p.x == 4); }));
+    ASSERT(i == 1);
+	
+    i = 0;
+    DO(e.ForEach<M(Position, Direction)>([&i](ECS::Engine<>&, ECS::Entity, Position& p, Direction&) { ++i; ASSERT(p.x == 4); }));
+    ASSERT(i == 1);
 	
     cout << "----------------------\n";
     cout << "SYSTEMS\n";
