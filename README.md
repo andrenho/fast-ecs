@@ -43,7 +43,7 @@ C&   GetComponent<C>(Entity ent);        // return a reference to a component
 e.GetComponent<Position>().x = 10;
 ```
 
-Iterating over entities: 
+Iterating overall entities: 
 ```C++
 void ForEach<C...>([](ECS::Entity, ...);
 
@@ -52,3 +52,5 @@ e.ForEach<Position, Direction>([](ECS::Entity ent, Position& pos, Direction& dir
     // do something
 });
 ```
+
+

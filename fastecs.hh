@@ -1,3 +1,5 @@
+// TODO - remove Engine from ForEach, remove System
+
 /* ENGINE INTERFACE
 
   Entity management:
