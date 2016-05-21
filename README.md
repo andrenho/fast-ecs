@@ -91,5 +91,5 @@ struct Component {
 void Examine<C...>();	 // where "C..." is a list of all components
 
 // example:
-e.Examine<Position, Direction();
+e.Examine<Position, Direction>();
 ```
