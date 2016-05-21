@@ -71,6 +71,25 @@ vector<System*> Systems();            // return a vector of systems to iterate, 
 for(auto& sys: e.Systems()) {
     sys->Execute(e);
 }
+
+// You can only add one system of each type (class).
 ```
 
-You can only add one system of each type (class).
+Debugging:
+
+```C++
+// for debugging, you need to compile with -DDEBUG or use
+#define DEBUG 1
+
+// each component needs to have a method with the following signature
+struct Component {
+    string to_str() const;
+    // ...
+};
+
+// then, to inspect all the entities
+void Examine<C...>();	 // where "C..." is a list of all components
+
+// example:
+e.Examine<Position, Direction();
+```
