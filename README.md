@@ -1,9 +1,11 @@
 # fast-ecs
-A C++14, fast, cache-friendly, storage-wise, header-only Entity Component System library.
+A C++14 fast, storage-wise, header-only Entity Component System library.
+
+* fast-ecs is **fast** because it is cache-friendly: it organizes all the information it needs to iterate the entities and read the components in one single array. In my computer, it takes 0.005 us to iterate each entity (this is 0.000005ms!).
+* fast-ecs is **storage-wise** because it organizes all components in the single array without gaps. This way, no space is wasted.
+* fast-ecs is **header-only** - include the header and you're good to go!
 
 [Download the header here.](https://raw.githubusercontent.com/andrenho/fast-ecs/master/fastecs.hh)
-
-Features.
 
 # Example
 
