@@ -94,7 +94,7 @@ Entity 0 direction is 1.2.
 Engine management:
 
 ```C++
-Engine<>();         // create a new Engine with default sizes
+Engine<>();         // create a new Engine
 void Reset();       // remove all entities, components and systems
 ```
 
