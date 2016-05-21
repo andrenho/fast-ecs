@@ -1,6 +1,7 @@
 #include "fastecs.hh"
 
 #include <cstdint>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <string>
@@ -175,12 +176,65 @@ int main()
     i = 0;
     DO(e.ForEach<M(Position, Direction)>([&i](ECS::Engine<>&, ECS::Entity, Position& p, Direction&) { ++i; ASSERT(p.x == 4); }));
     ASSERT(i == 1);
+
+    i = 0;
+    DO(e.ForEach([&i](ECS::Engine<>&, ECS::Entity){ ++i; }));
+    ASSERT(i == 2);
 	
+    cout << "----------------------\n";
+    cout << "SPEED\n";
+    cout << "----------------------\n";
+
+    e.Reset();
+
+    cout << "Testing speed...\n";
+    const int NUM_ITERATIONS = 500000;
+
+    for(int i=0; i<NUM_ITERATIONS; ++i) {
+        ECS::Entity entity = e.CreateEntity();
+        e.AddComponent<Position>(entity, 5, 5);
+        e.AddComponent<Direction>(entity, 20);
+    }
+
+    auto start = chrono::system_clock::now();
+    volatile double x;
+    e.ForEach<Position>([&](ECS::Engine<>&, ECS::Entity, Position& pos) {
+        x = pos.x;
+    });
+
+    auto t = static_cast<double>(chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - start).count()) / static_cast<double>(NUM_ITERATIONS);
+    cout << "Each iteration: " << t << "us.\n\n";
+
+    cout << "\nTesting speed with failures...\n";
+    e.Reset();
+    for(int i=0; i<NUM_ITERATIONS; ++i) {
+        ECS::Entity entity = e.CreateEntity();
+        if(i % 2 == 0) {
+            e.AddComponent<Position>(entity, 5, 5);
+        }
+        e.AddComponent<Direction>(entity, 20);
+    }
+
+    start = chrono::system_clock::now();
+    e.ForEach<Position>([&](ECS::Engine<>&, ECS::Entity, Position& pos) {
+        x = pos.x;
+    });
+
+    t = static_cast<double>(chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - start).count()) / static_cast<double>(NUM_ITERATIONS);
+    cout << "Each iteration: " << t << "us.\n\n";
+
     cout << "----------------------\n";
     cout << "SYSTEMS\n";
     cout << "----------------------\n";
 
-	// TODO - systems
+	struct TestSystem : public ECS::System {
+        TestSystem(int i) : i(i) {}
+        void Execute() { ASSERT(i == 2); }
+        int i;
+    };
+    e.AddSystem<TestSystem>(2);
+    ASSERT(e.GetSystem<TestSystem>().i == 2);
+    ASSERT(e.Systems().size() == 1);
 }
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
