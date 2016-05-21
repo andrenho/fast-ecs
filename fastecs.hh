@@ -84,6 +84,7 @@ public:
     void Reset() {{{
         _components.clear();   _components.shrink_to_fit();
         _entity_index.clear(); _entity_index.shrink_to_fit();
+        _systems.clear();      _systems.shrink_to_fit();
     }}}
 
     //
