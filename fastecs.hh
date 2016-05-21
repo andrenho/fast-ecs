@@ -362,9 +362,6 @@ public:
     //
     // {{{ DEBUGGING
 #ifdef DEBUG
-    //
-    // DEBUGGING
-    //
     template<typename... C> std::string Examine(Entity ent=std::numeric_limits<component_size_t>::max()) const {
         std::string s;
         if(ent == std::numeric_limits<component_size_t>::max()) {
