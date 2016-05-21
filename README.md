@@ -38,4 +38,7 @@ void RemoveAllComponents();              // clear an entity (good for entity reu
 
 bool HasComponent<C>(Entity ent);        // return true if entity contains a component
 C&   GetComponent<C>(Entity ent);        // return a reference to a component
+
+// When getting a component, it can be edited directly:
+e.GetComponent<Position>().x = 10;
 ```
