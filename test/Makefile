@@ -3,6 +3,7 @@
 # 
 CXXFLAGS = --std=c++14 @warnings.txt -g -ggdb3 -O0 -fno-inline-functions -I.. -DDEBUG
 LDFLAGS = -g
+LDLIBS = -lgtest
 ifeq ($(CXX),g++)
   CXXFLAGS += -fno-inline-small-functions
 endif
@@ -19,7 +20,7 @@ test.o: test.cc #../fastecs.hh
 
 #example.o: example.cc ../fastecs.hh
 
-lint: 
+lint:
 	clang-tidy ../fastecs.hh "-checks=*,-google-build-using-namespace,-google-readability-todo" -- --std=c++14
 
 clean:

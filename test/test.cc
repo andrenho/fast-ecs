@@ -4,12 +4,11 @@
 #include <limits>
 #include <vector>
 
-#define private public
+#include <gtest/gtest_prod.h>
 
 namespace ECS {
 
 class Engine {
-
 private:
     template<typename entity_size_t    = uint32_t,
              typename component_id_t   = uint16_t,
@@ -91,6 +90,8 @@ private:
         }
 
     private:
+        FRIEND_TEST(RawTest, Basic);
+
         std::vector<size_t> _entities = {};
         std::vector<uint8_t> _ary = {};
 
@@ -120,9 +121,9 @@ private:
                 *it += total_sz;
             }
             // adjust entity size
-            *entity_sz += total_sz;
+            (*entity_sz) += total_sz;
 
-            return idx + (*entity_sz) - total_sz;
+            return idx + (*entity_sz);
         }
     };
 
@@ -130,10 +131,46 @@ private:
 
 }  // namespace ECS
 
-#undef private
-
 //-----------------------------------------------------
 
+#include <vector>
+using namespace std;
+
+#include <gtest/gtest.h>
+
+namespace ECS {
+
+class RawTest : public ::testing::Test {
+protected:
+    using RawData = ECS::Engine::RawData<>;
+    RawData rd = {};
+
+public:
+    size_t e1 = 0, e2 = 0;
+
+protected:
+    RawTest() : e1(rd.AddEntity()), e2(rd.AddEntity()) {}
+};
+
+TEST_F(RawTest, Basic) {
+    ASSERT_EQ(e1, 0);
+    ASSERT_EQ(rd.GetEntitySize(e1), 4);
+
+    ASSERT_EQ(e2, 1);
+    ASSERT_EQ(rd.GetEntitySize(e2), 4);
+
+    ASSERT_EQ(rd._entities, vector<size_t>({ 0, 4 }));
+    ASSERT_EQ(rd._ary, vector<uint8_t>({ 4, 0, 0, 0, 4, 0, 0, 0 }));
+}
+
+}
+
+int main(int argc, char** argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
+
+#if 0
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
 
@@ -193,5 +230,6 @@ TEST_CASE("Add raw entities", "[entities]") {
         /* component 1:0 id */   0xFF, 0xFF,
         /* component 1:0 data*/  42, 0 }));
 }
+#endif
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
