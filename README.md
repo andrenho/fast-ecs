@@ -150,9 +150,14 @@ e.ForEach<Position, Direction>([](ECS::Entity ent, Position& pos, Direction& dir
 Systems:
 
 ```C++
-// all systems must inherit from ECS::System
+// all systems must inherit from a single class
+struct System {
+    virtual void Execute(Engine<System>& e) = 0;
+    virtual ~System() {}
+}
+
 struct MySystem : public ECS::System {
-    template <typename E> void Execute(E& e) {
+    void Execute(Engine<System>& e) override {
         // do something
     }
 };
