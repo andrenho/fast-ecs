@@ -90,8 +90,8 @@ TEST_F(RawTest, RemoveComponents) {
     MyComponent my = { 42 };
     rd.AddComponent(e2, sizeof my, 7, &my);
 
-    auto destructor = [](void*){};
-    
+    auto destructor = [](void* my) { static_cast<MyComponent*>(my)->~MyComponent(); };
+
     rd.InvalidateComponent(e2, 7, destructor);
     ASSERT_EQ(rd._ary, vector<uint8_t>({ 
         /* entity 0 */           4, 0, 0, 0, 
