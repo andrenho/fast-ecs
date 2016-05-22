@@ -34,9 +34,15 @@ struct Direction {
 // SYSTEMS
 //
 
-class PositionSystem : public ECS::System<> {
+class System { 
+public:
+    virtual void Execute(ECS::Engine<System>& e) = 0;
+    virtual ~System() {}
+};
 
-    void Execute(ECS::Engine<>& e) override {
+class PositionSystem : public System {
+public:
+    void Execute(ECS::Engine<System>& e) override {
         e.ForEach<Position>([](ECS::Entity entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
@@ -45,14 +51,13 @@ class PositionSystem : public ECS::System<> {
     }
 };
 
-class DirectionSystem : public ECS::System<> {
-
-    void Execute(ECS::Engine<>& e) override {
+class DirectionSystem : public System {
+public:
+    void Execute(ECS::Engine<System>& e) override {
         e.ForEach<Direction>([](ECS::Entity entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
-
 };
 
 //
@@ -61,7 +66,7 @@ class DirectionSystem : public ECS::System<> {
 
 int main()
 {
-    ECS::Engine<> e;
+    ECS::Engine<System> e;
 
     ECS::Entity e1 = e.CreateEntity(),
                 e2 = e.CreateEntity();
@@ -80,7 +85,6 @@ int main()
     }
 }
 
-
 /* Result:
 
 Entity 0 position.x was 20 but now is 21.
@@ -94,7 +98,9 @@ Entity 0 direction is 1.2.
 Engine management:
 
 ```C++
-Engine<>();         // create a new Engine
+Engine<System>();   // create a new Engine
+// System is the parent class for all systems. It can be left blank if systems are not used.
+
 void Reset();       // remove all entities, components and systems
 ```
 
