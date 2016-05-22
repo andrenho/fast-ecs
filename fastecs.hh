@@ -138,7 +138,7 @@ public:
     //
     // COMPONENT MANAGEMENT
     //
-    template<typename C, typename... P> C& AddComponent(Entity entity, P... pars) {{{
+    template<typename C, typename... P> C& AddComponent(Entity entity, P&&... pars) {{{
         // assertions
         static_assert(sizeof(C) <= std::numeric_limits<component_size_t>::max(), 
                 "Component size > maximum component size");
@@ -386,7 +386,7 @@ public:
     //
     // {{{ Manage systems
 
-    template<typename S, typename... P> S& AddSystem(P ...pars) {
+    template<typename S, typename... P> S& AddSystem(P&& ...pars) {
         _systems.push_back(new S(pars...));
         return *static_cast<S*>(_systems.back());
     }
