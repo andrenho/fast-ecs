@@ -156,7 +156,7 @@ struct System {
     virtual ~System() {}
 }
 
-struct MySystem : public ECS::System {
+struct MySystem : public System {
     void Execute(Engine<System>& e) override {
         // do something
     }
