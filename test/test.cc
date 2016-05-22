@@ -21,6 +21,10 @@ struct Direction {
     string to_str() const { return "Direction: " + to_string(static_cast<int>(angle)); }
 };
 
+struct System {
+    virtual ~System() {}
+};
+
 #define KNRM  "\x1B[0m"
 #define KRED  "\x1B[31m"
 #define KGRN  "\x1B[32m"
@@ -31,7 +35,7 @@ struct Direction {
 #define KWHT  "\x1B[37m"
 
 struct test_debug {
-    static void examine(ECS::Engine<> const& e) {
+    static void examine(ECS::Engine<System> const& e) {
         cout << "  _entity_index:    [ ";
         for(auto const& i: e._entity_index) { cout << i << " "; }
         cout << "]\n";
@@ -92,7 +96,8 @@ int main()
     cout << "BASIC TESTS\n";
     cout << "----------------------\n";
 
-    DO(ECS::Engine<> e);
+    DO(ECS::Engine<System> e);
+
     EXPECT({});
     DO(ECS::Entity e1 = e.CreateEntity());
     EXPECT(M({0x04, 0x00, 0x00, 0x00}));
@@ -182,7 +187,7 @@ int main()
     ASSERT(i == 2);
 
     i = 0;
-    DO(ECS::Engine<> const& f = e; f.ForEach<Position>([&i](ECS::Entity, Position const& p) { ++i; ASSERT(p.x == 4); }));
+    DO(ECS::Engine<System> const& f = e; f.ForEach<Position>([&i](ECS::Entity, Position const& p) { ++i; ASSERT(p.x == 4); }));
     ASSERT(i == 1);
     
     cout << "----------------------\n";
@@ -231,9 +236,9 @@ int main()
     cout << "SYSTEMS\n";
     cout << "----------------------\n";
 
-    struct TestSystem : public ECS::System<> {
+    struct TestSystem : public System {
         TestSystem(int i) : i(i) {}
-        void Execute(ECS::Engine<>& e) override { ASSERT(i == 2); }
+        void Execute(ECS::Engine<System>& e) { ASSERT(i == 2); }
         int i;
     };
     e.AddSystem<TestSystem>(2);

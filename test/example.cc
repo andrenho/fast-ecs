@@ -22,9 +22,15 @@ struct Direction {
 // SYSTEMS
 //
 
-class PositionSystem : public ECS::System<> {
+class System { 
+public:
+    virtual void Execute(ECS::Engine<System>& e) = 0;
+    virtual ~System() {}
+};
 
-    void Execute(ECS::Engine<>& e) override {
+class PositionSystem : public System {
+public:
+    void Execute(ECS::Engine<System>& e) override {
         e.ForEach<Position>([](ECS::Entity entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
@@ -33,14 +39,13 @@ class PositionSystem : public ECS::System<> {
     }
 };
 
-class DirectionSystem : public ECS::System<> {
-
-    void Execute(ECS::Engine<>& e) override {
+class DirectionSystem : public System {
+public:
+    void Execute(ECS::Engine<System>& e) override {
         e.ForEach<Direction>([](ECS::Entity entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
-
 };
 
 //
@@ -49,7 +54,7 @@ class DirectionSystem : public ECS::System<> {
 
 int main()
 {
-    ECS::Engine<> e;
+    ECS::Engine<System> e;
 
     ECS::Entity e1 = e.CreateEntity(),
                 e2 = e.CreateEntity();

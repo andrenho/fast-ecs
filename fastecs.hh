@@ -61,18 +61,7 @@ namespace ECS {
 
 typedef size_t Entity;
 
-template<typename entity_size_t, typename component_size_t, typename component_id_t> class Engine;
-
-template<typename entity_size_t=uint32_t, typename component_size_t=uint16_t, typename component_id_t=uint16_t>
-class System {
-public:
-    virtual void Execute(class Engine<entity_size_t, component_size_t, component_id_t>&) {}
-    virtual ~System() {}
-protected:
-    System() {}
-};
-
-template<typename entity_size_t=uint32_t, typename component_size_t=uint16_t, typename component_id_t=uint16_t>
+template<typename system_t=void*, typename entity_size_t=uint32_t, typename component_size_t=uint16_t, typename component_id_t=uint16_t>
 class Engine {
     friend ::test_debug;  // for unit testing
     
@@ -362,7 +351,7 @@ public:
     //
     // {{{ DEBUGGING
 #ifdef DEBUG
-    template<typename... C> std::string Examine(Entity ent=std::numeric_limits<component_size_t>::max()) const {
+        template<typename... C> std::string Examine(Entity ent=std::numeric_limits<component_size_t>::max()) const {
         std::string s;
         if(ent == std::numeric_limits<component_size_t>::max()) {
             for(Entity i=0; i<_entity_index.size(); ++i) {
@@ -412,7 +401,7 @@ public:
         throw std::runtime_error("System not found.");
     }
 
-    std::vector<System<entity_size_t,component_size_t,component_id_t>*> const& Systems() const { return _systems; }
+    std::vector<system_t*> const& Systems() const { return _systems; }
 
     // }}}
 
@@ -422,7 +411,7 @@ public:
 private:
     std::vector<size_t>  _entity_index = {};
     std::vector<uint8_t> _components = {};
-    std::vector<System<entity_size_t,component_size_t,component_id_t>*> _systems = {};
+    std::vector<system_t*> _systems = {};
 
     size_t FindUnusedComponent(size_t idx, size_t *extend_size) {{{
         entity_size_t sz = GetComponentSize(idx);
