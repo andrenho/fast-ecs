@@ -47,7 +47,7 @@ private:
             component_id_t   id;
         };
 
-        static constexpr size_t INVALIDATED_ENTITY = std::numeric_limits<size_t>::max();
+        static constexpr size_t         INVALIDATED_ENTITY    = std::numeric_limits<size_t>::max();
         static constexpr component_id_t INVALIDATED_COMPONENT = std::numeric_limits<component_id_t>::max();
 
         size_t AddEntity() {
@@ -59,12 +59,20 @@ private:
             return _entities.size()-1;
         }
 
-        bool IsEntityValid(size_t entity) {
+        bool IsEntityValid(size_t entity) const {
             return GetEntitySize(entity) >= 0;
         }
 
-        entity_size_t GetEntitySize(size_t entity) {
-            return *reinterpret_cast<entity_size_t*>(&_ary[_entities[entity]]);
+        entity_size_t GetEntitySize(size_t entity) const {
+            return *reinterpret_cast<entity_size_t const*>(&_ary[_entities[entity]]);
+        }
+
+        uint8_t* GetEntityPtr(size_t entity) {
+            return &_ary[entity];
+        }
+
+        uint8_t const* GetEntityPtr(size_t entity) const {
+            return &_ary[entity];
         }
 
         void InvalidateEntity(size_t entity) {
@@ -108,6 +116,30 @@ private:
         }
 
         template<typename F>
+        void ForEachEntity(F const& f, bool skip_invalid = true) const {
+            if(_ary.empty()) {
+                return;
+            }
+            size_t entity = 0;
+            uint8_t const* entity_ptr = &_ary[0],
+                    *entity_end = &_ary[0] + _ary.size();
+            while(entity_ptr < entity_end) {
+                entity_size_t entity_sz = *reinterpret_cast<entity_size_t const*>(entity_ptr);
+                
+                if((skip_invalid && entity_sz >= 0) || !skip_invalid) {
+                    bool stop = f(entity, entity_ptr);
+                    if(stop) {
+                        return;
+                    }
+                }
+                
+                entity_ptr += abs(entity_sz);
+                ++entity;
+            }
+        }
+
+        // TODO - const version
+        template<typename F>
         void ForEachComponentInEntity(uint8_t* entity_ptr, F const& f) {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
             if(entity_sz < 0) {
@@ -118,6 +150,24 @@ private:
             entity_ptr += sizeof(entity_size_t);
             while(entity_ptr < end) {
                 Component* component = reinterpret_cast<Component*>(entity_ptr);
+                if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
+                    return;
+                }
+                entity_ptr += component->sz + sizeof(Component);
+            }
+        }
+
+        template<typename F>
+        void ForEachComponentInEntity(uint8_t const* entity_ptr, F const& f) const {
+            entity_size_t entity_sz = *reinterpret_cast<entity_size_t const*>(entity_ptr);
+            if(entity_sz < 0) {
+                throw ECSError("Using a removed entity");
+            }
+            uint8_t const* initial_entity_ptr = entity_ptr;
+            uint8_t const* end = entity_ptr + entity_sz;
+            entity_ptr += sizeof(entity_size_t);
+            while(entity_ptr < end) {
+                Component const* component = reinterpret_cast<Component const*>(entity_ptr);
                 if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
                     return;
                 }
@@ -188,6 +238,7 @@ private:
         FRIEND_TEST(RawTest, Compress);
         FRIEND_TEST(RawTest, DifferentSizes);
         FRIEND_TEST(RawTest, InvalidSizes);
+        FRIEND_TEST(RawTest, IterateConst);
 #endif
 
         std::vector<size_t> _entities = {};
@@ -249,6 +300,28 @@ private:
     };
 
     // }}}
+/*
+class RawData<entity_size_t, component_id_t, component_size_t> {
+    void          AddEntity();
+    bool          IsEntityValid(size_t entity) const;
+    entity_size_t GetEntitySize(size_t entity) const;
+    uint8_t*      GetEntityPtr(size_t) const;
+    void          InvalidateEntity(size_t entity);
+  
+    void          AddComponent(size_t entity, component_size_t sz,
+                               component_id_t id, void* data);
+    void          InvalidateComponent(size_t entity, component_id_t id,
+                                      function<void(void* data)> destructor);
+  
+    // return true to stop searching
+    void          ForEachEntity(function<bool(size_t entity, uint8_t* entity_ptr)> f, 
+                                bool skip_invalid = true);
+    void          ForEachComponentInEntity(uint8_t* entity_ptr, 
+                      function<bool(Component* c, uint8_t* data, entity_size_t pos)> f);
+  
+    void          Compress();
+}
+*/
 
 };
 

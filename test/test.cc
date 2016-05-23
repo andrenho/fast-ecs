@@ -244,6 +244,34 @@ TEST_F(RawTest, InvalidSizes) {
 }
 
 
+TEST_F(RawTest, IterateConst) {
+    struct MyComponent {
+        uint16_t a;
+    };
+    MyComponent my = { 42 };
+    rd.AddComponent(e1, sizeof my, 7, &my);
+
+    // non-const
+    rd.ForEachEntity([](size_t entity, uint8_t const*) { EXPECT_EQ(entity, 0); return true; });
+    rd.ForEachComponentInEntity(rd.GetEntityPtr(e1), [](decltype(rd)::Component* c, void* data, int32_t) {
+        EXPECT_EQ(c->id, 7);
+        MyComponent* my = reinterpret_cast<MyComponent*>(data);
+        EXPECT_EQ(my->a, 42);
+        return true;
+    });
+
+    // const
+    ECS::Engine<int,0,0,0>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
+    rdc.ForEachEntity([](size_t entity, uint8_t const*) { EXPECT_EQ(entity, 0); return true; });
+    rdc.ForEachComponentInEntity(rdc.GetEntityPtr(e1), [](decltype(rd)::Component const* c, void const* data, int32_t) {
+        EXPECT_EQ(c->id, 7);
+        MyComponent const* my = reinterpret_cast<MyComponent const*>(data);
+        EXPECT_EQ(my->a, 42);
+        return true;
+    });
+}
+
+
 }  // namespace ECS
 
 
