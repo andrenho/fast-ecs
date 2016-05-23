@@ -6,6 +6,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 #ifdef GTEST
@@ -20,20 +21,21 @@ public:
     explicit ECSError(const char* what_arg) : runtime_error(what_arg) {}
 };
 
-/*
 template<
     typename System,
     uint64_t max_components, uint64_t max_entity_size, uint64_t max_component_size,
     typename... Components>
-*/
 class Engine {
 private:
     // {{{ RAW DATA INTERFACE
 
-    template<typename entity_size_t    = int32_t,
-             typename component_id_t   = uint16_t,
-             typename component_size_t = uint16_t>
+    template<typename entity_size_t, typename component_id_t, typename component_size_t>
     class RawData {
+
+        static_assert(std::is_signed<entity_size_t>::value, "Entity size type must be signed.");
+        static_assert(std::is_unsigned<component_id_t>::value, "Component ID type must be unsigned.");
+        static_assert(std::is_unsigned<component_size_t>::value, "Component size type must be signed.");
+
     public:
         struct Entity {
             entity_size_t sz;
@@ -185,6 +187,7 @@ private:
         FRIEND_TEST(RawTest, InvalidateEntities);
         FRIEND_TEST(RawTest, Compress);
         FRIEND_TEST(RawTest, DifferentSizes);
+        FRIEND_TEST(RawTest, InvalidSizes);
 #endif
 
         std::vector<size_t> _entities = {};
@@ -206,6 +209,9 @@ private:
 
         size_t _find_space_for_component(size_t entity, size_t total_sz) {
             // find entity size
+            if(entity >= _entities.size()) {
+                throw ECSError("Entity does not exist");
+            }
             size_t idx = _entities[entity];
             if(idx == INVALIDATED_ENTITY) {
                 throw ECSError("Using a removed entity");
@@ -227,6 +233,9 @@ private:
             }
 
             // we can't reuse inactive components, so we open space in _ary
+            if(entity_sz + total_sz > std::numeric_limits<entity_size_t>::max()) {
+                throw ECSError("By adding this component, the entity would become too large.");
+            }
             _ary.insert(begin(_ary) + idx + entity_sz, total_sz, 0);
             // adjust indexes
             for(auto it=begin(_entities)+entity+1; it != end(_entities); ++it) {

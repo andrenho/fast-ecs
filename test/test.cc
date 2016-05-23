@@ -9,7 +9,7 @@ namespace ECS {
 
 class RawTest : public ::testing::Test {
 protected:
-    using RawData = ECS::Engine::RawData<>;
+    using RawData = ECS::Engine<int,0,0,0>::RawData<int32_t, uint16_t, uint16_t>;
     RawData rd = {};
 
 public:
@@ -188,7 +188,7 @@ TEST_F(RawTest, Compress) {
 
 
 TEST_F(RawTest, DifferentSizes) {
-    ECS::Engine::RawData<uint8_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,0,0,0>::RawData<int8_t, uint8_t, uint8_t> rd2;
 
     e1 = rd2.AddEntity();
     e2 = rd2.AddEntity();
@@ -206,6 +206,41 @@ TEST_F(RawTest, DifferentSizes) {
         /* component 1:0 id */   7,
         /* component 1:0 data*/  42, }));
     EXPECT_EQ(rd2._entities, vector<size_t>({ 0, 1 }));
+}
+
+
+TEST_F(RawTest, InvalidSizes) {
+    ECS::Engine<int,0,0,0>::RawData<int16_t, uint8_t, uint8_t> rd2;
+    e1 = rd2.AddEntity();
+
+    /*
+    // ID too large - can't logically happen because it overflows the ID type
+    struct Small {
+        uint8_t a;
+    };
+    Small small = { 42 };
+    EXPECT_ANY_THROW(rd2.AddComponent(e1, sizeof small, 300, &small));
+
+    // component too large - can't logically happen because it overflows the size type
+    struct Large {
+        uint8_t big[300];
+    };
+    Large large;
+    EXPECT_ANY_THROW(rd2.AddComponent(e1, sizeof large, 1, &large));
+    */
+
+    // entity too large
+    ECS::Engine<int,0,0,0>::RawData<int8_t, uint8_t, uint8_t> rd3;
+    e1 = rd3.AddEntity();
+    struct Medium {
+        uint8_t medium[100];
+    };
+    Medium medium;
+    rd3.AddComponent(e1, sizeof medium, 1, &medium);
+    EXPECT_ANY_THROW(rd3.AddComponent(e1, sizeof medium, 2, &medium));
+
+    // entity does not exist
+    EXPECT_ANY_THROW(rd3.AddComponent(255, sizeof medium, 1, &medium));
 }
 
 
