@@ -15,17 +15,27 @@
 
 namespace ECS {
 
+// {{{ EXCEPTIONS
+
 class ECSError : public std::runtime_error {
 public:
     explicit ECSError(std::string const& what_arg) : runtime_error(what_arg) {}
-    explicit ECSError(const char* what_arg) : runtime_error(what_arg) {}
+    explicit ECSError(const char* what_arg)        : runtime_error(what_arg) {}
 };
+
+// }}}
 
 template<
     typename System,
-    uint64_t max_components, uint64_t max_entity_size, uint64_t max_component_size,
+    size_t max_components, size_t max_entity_size, size_t max_component_size,
     typename... Components>
 class Engine {
+public:
+    size_t AddEntity() { return rd.AddEntity(); }
+    void   RemoveEntity(size_t entity) { rd.InvalidateEntity(entity); }
+
+    void   Compress() { rd.Compress(); }
+    
 private:
     // {{{ RAW DATA INTERFACE
 
@@ -322,6 +332,21 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
     void          Compress();
 }
 */
+    // {{{ TEMPLATE MAGIC
+
+    template <typename T>
+    struct size_type_t {
+        typedef size_type_t type;
+    };
+
+    template<size_t sz>
+    static constexpr auto signed_data_type() {
+        return uint8_t;
+    }
+
+    // }}}
+
+    RawData</*int32_t*/ signed_data_type<max_components>(), uint8_t, uint8_t> rd = {};
 
 };
 

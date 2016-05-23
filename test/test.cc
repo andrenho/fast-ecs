@@ -7,6 +7,8 @@ using namespace std;
 
 namespace ECS {
 
+// {{{ TEST RAWDATA
+
 class RawTest : public ::testing::Test {
 protected:
     using RawData = ECS::Engine<int,0,0,0>::RawData<int32_t, uint16_t, uint16_t>;
@@ -271,6 +273,20 @@ TEST_F(RawTest, IterateConst) {
     });
 }
 
+// }}}
+
+class EngineTest : public ::testing::Test {
+protected:
+    class System {
+    };
+
+    using MyEngine = ECS::Engine<System, 50000, 200000, 60000>;
+    MyEngine e = {};
+};
+
+TEST_F(EngineTest, Add) {
+    size_t e1 = e.AddEntity();
+}
 
 }  // namespace ECS
 
