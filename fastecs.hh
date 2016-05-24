@@ -6,6 +6,7 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -27,14 +28,37 @@ public:
 
 template<
     typename System,
-    size_t max_components, size_t max_entity_size, size_t max_component_size,
     typename... Components>
 class Engine {
 public:
+    // 
+    // ENTITIES
+    //
     size_t AddEntity() { return rd.AddEntity(); }
     void   RemoveEntity(size_t entity) { rd.InvalidateEntity(entity); }
 
-    void   Compress() { rd.Compress(); }
+    //
+    // COMPONENTS
+    //
+    template<typename C, typename... P> void AddComponent(size_t entity, P&& ...pars) {
+        C component(pars...);
+        // TODO find out ID
+        // TODO store destructor
+        rd.AddComponent(entity, sizeof component, 0, &component);
+    }
+
+    // 
+    // MANAGEMENT
+    //
+    void Compress() { rd.Compress(); }
+
+    //
+    // ITERATION
+    //
+
+    //
+    // SYSTEMS
+    //
     
 private:
     // {{{ RAW DATA INTERFACE
@@ -334,20 +358,46 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
 */
     // {{{ TEMPLATE MAGIC
 
-    template <typename T>
-    struct size_type_t {
-        typedef size_type_t type;
-    };
+    // create a tuple from the component list
+    using ComponentTuple = typename std::tuple<Components...>;
+    static_assert(std::tuple_size<ComponentTuple>::value > 0, "Add at least one component.");
 
-    template<size_t sz>
-    static constexpr auto signed_data_type() {
-        return uint8_t;
+    // "function" that returns a signed integer type based on the number
+    template<size_t n, typename = void> struct SignedDataTypeImpl;
+    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n <= std::numeric_limits<int8_t>::max())>::type> { using type = int8_t; };
+    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<int8_t>::max() && n <= std::numeric_limits<int16_t>::max())>::type> { using type = int16_t; };
+    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<int16_t>::max() && n <= std::numeric_limits<int32_t>::max())>::type> { using type = int32_t; };
+    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<int32_t>::max() && n <= std::numeric_limits<int64_t>::max())>::type> { using type = int64_t; };
+    template<size_t n> using SignedDataType = typename SignedDataTypeImpl<n>::type;
+
+    // "function" that returns a unsigned integer type based on the number
+    template<size_t n, typename = void> struct UnsignedDataTypeImpl;
+    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n <= std::numeric_limits<uint8_t>::max())>::type> { using type = uint8_t; };
+    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<uint8_t>::max() && n <= std::numeric_limits<uint16_t>::max())>::type> { using type = uint16_t; };
+    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<uint16_t>::max() && n <= std::numeric_limits<uint32_t>::max())>::type> { using type = uint32_t; };
+    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<uint32_t>::max() && n <= std::numeric_limits<uint64_t>::max())>::type> { using type = uint64_t; };
+    template<size_t n> using UnsignedDataType = typename UnsignedDataTypeImpl<n>::type;
+
+    // return the maximum size of a list of types
+    template<typename T> static constexpr size_t max_size() { return sizeof(T); }
+    template<typename T, typename U, typename... V> static constexpr size_t max_size() {
+        return max_size<T>() > max_size<U, V...>() ?  max_size<T>() : max_size<U, V...>();
+    }
+
+    // return the sum of the sizes of a list of types
+    template<typename T> static constexpr size_t sum_size() { return sizeof(T); }
+    template<typename T, typename U, typename... V> static constexpr size_t sum_size() {
+        return sum_size<T>() + sum_size<U, V...>();
     }
 
     // }}}
 
-    RawData</*int32_t*/ signed_data_type<max_components>(), uint8_t, uint8_t> rd = {};
-
+    //RawData<SignedDataType<max_entity_size>, UnsignedDataType<max_component_id>, UnsignedDataType<max_component_size>> rd = {};
+    RawData<
+        SignedDataType<sum_size<Components...>()>,                  // entity index size
+        UnsignedDataType<std::tuple_size<ComponentTuple>::value>,   // component id size
+        UnsignedDataType<max_size<Components...>()>                 // component index size
+    > rd = {};
 };
 
 }  // namespace ECS

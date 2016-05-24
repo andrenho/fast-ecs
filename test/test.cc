@@ -11,7 +11,7 @@ namespace ECS {
 
 class RawTest : public ::testing::Test {
 protected:
-    using RawData = ECS::Engine<int,0,0,0>::RawData<int32_t, uint16_t, uint16_t>;
+    using RawData = ECS::Engine<int,int>::RawData<int32_t, uint16_t, uint16_t>;
     RawData rd = {};
 
 public:
@@ -190,7 +190,7 @@ TEST_F(RawTest, Compress) {
 
 
 TEST_F(RawTest, DifferentSizes) {
-    ECS::Engine<int,0,0,0>::RawData<int8_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,int>::RawData<int8_t, uint8_t, uint8_t> rd2;
 
     e1 = rd2.AddEntity();
     e2 = rd2.AddEntity();
@@ -212,7 +212,7 @@ TEST_F(RawTest, DifferentSizes) {
 
 
 TEST_F(RawTest, InvalidSizes) {
-    ECS::Engine<int,0,0,0>::RawData<int16_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,int>::RawData<int16_t, uint8_t, uint8_t> rd2;
     e1 = rd2.AddEntity();
 
     /*
@@ -232,7 +232,7 @@ TEST_F(RawTest, InvalidSizes) {
     */
 
     // entity too large
-    ECS::Engine<int,0,0,0>::RawData<int8_t, uint8_t, uint8_t> rd3;
+    ECS::Engine<int,int>::RawData<int8_t, uint8_t, uint8_t> rd3;
     e1 = rd3.AddEntity();
     struct Medium {
         uint8_t medium[100];
@@ -263,7 +263,7 @@ TEST_F(RawTest, IterateConst) {
     });
 
     // const
-    ECS::Engine<int,0,0,0>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
+    ECS::Engine<int,int>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
     rdc.ForEachEntity([](size_t entity, uint8_t const*) { EXPECT_EQ(entity, 0); return true; });
     rdc.ForEachComponentInEntity(rdc.GetEntityPtr(e1), [](decltype(rd)::Component const* c, void const* data, int32_t) {
         EXPECT_EQ(c->id, 7);
@@ -280,12 +280,22 @@ protected:
     class System {
     };
 
-    using MyEngine = ECS::Engine<System, 50000, 200000, 60000>;
+    struct Position {
+        float x, y;
+        Position(float x, float y) : x(x), y(y) {}
+    };
+
+    struct Direction {
+        float angle;
+    };
+
+    using MyEngine = ECS::Engine<System, Position, Direction>;
     MyEngine e = {};
 };
 
 TEST_F(EngineTest, Add) {
     size_t e1 = e.AddEntity();
+    e.AddComponent<Position>(e1, 40.f, 50.f);
 }
 
 }  // namespace ECS
