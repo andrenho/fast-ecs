@@ -34,23 +34,26 @@ public:
     // 
     // ENTITIES
     //
-    size_t AddEntity() { return rd.AddEntity(); }
-    void   RemoveEntity(size_t entity) { rd.InvalidateEntity(entity); }
+    size_t AddEntity() {
+        return rd.AddEntity(); 
+    }
 
     //
     // COMPONENTS
     //
     template<typename C, typename... P> void AddComponent(size_t entity, P&& ...pars) {
         C component(pars...);
-        // TODO find out ID
-        // TODO store destructor
-        rd.AddComponent(entity, sizeof component, 0, &component);
+        component_id_t id = component_id<C>();
+        // TODO - store destructor?
+        rd.AddComponent(entity, sizeof component, id, &component);
     }
 
     // 
     // MANAGEMENT
     //
-    void Compress() { rd.Compress(); }
+    void Compress() { 
+        rd.Compress(); 
+    }
 
     //
     // ITERATION
@@ -356,11 +359,8 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
     void          Compress();
 }
 */
-    // {{{ TEMPLATE MAGIC
 
-    // create a tuple from the component list
-    using ComponentTuple = typename std::tuple<Components...>;
-    static_assert(std::tuple_size<ComponentTuple>::value > 0, "Add at least one component.");
+    // {{{ TEMPLATE MAGIC
 
     // "function" that returns a signed integer type based on the number
     template<size_t n, typename = void> struct SignedDataTypeImpl;
@@ -390,14 +390,28 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
         return sum_size<T>() + sum_size<U, V...>();
     }
 
+    // create a tuple from the component list
+    using ComponentTuple = typename std::tuple<Components...>;
+    static_assert(std::tuple_size<ComponentTuple>::value > 0, "Add at least one component.");
+
+    // detect types
+    using entity_size_t    = SignedDataType<sum_size<Components...>()>;                  // entity index size
+    using component_id_t   = UnsignedDataType<std::tuple_size<ComponentTuple>::value>;   // component id size
+    using component_size_t = UnsignedDataType<max_size<Components...>()>;                // component index size
+
+    // find index by type in a tuple
+    template<typename T, typename Tuple> struct tuple_index;
+    template<typename T, typename... Types> struct tuple_index<T, std::tuple<T, Types...>> { static const size_t value = 0; };
+    template<typename T, typename U, typename... Types> struct tuple_index<T, std::tuple<U, Types...>> { static const size_t value = 1 + tuple_index<T, std::tuple<Types...>>::value; };
+
+    // return the ID of a component
+    template<typename C> static constexpr component_id_t component_id() {
+        return tuple_index<C, ComponentTuple>::value;
+    }
+    
     // }}}
 
-    //RawData<SignedDataType<max_entity_size>, UnsignedDataType<max_component_id>, UnsignedDataType<max_component_size>> rd = {};
-    RawData<
-        SignedDataType<sum_size<Components...>()>,                  // entity index size
-        UnsignedDataType<std::tuple_size<ComponentTuple>::value>,   // component id size
-        UnsignedDataType<max_size<Components...>()>                 // component index size
-    > rd = {};
+    RawData<entity_size_t, component_id_t, component_size_t> rd = {};
 };
 
 }  // namespace ECS

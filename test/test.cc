@@ -287,6 +287,7 @@ protected:
 
     struct Direction {
         float angle;
+        Direction(float angle) : angle(angle) {}
     };
 
     using MyEngine = ECS::Engine<System, Position, Direction>;
@@ -296,6 +297,7 @@ protected:
 TEST_F(EngineTest, Add) {
     size_t e1 = e.AddEntity();
     e.AddComponent<Position>(e1, 40.f, 50.f);
+    e.AddComponent<Direction>(e1, 60.f);
 }
 
 }  // namespace ECS
