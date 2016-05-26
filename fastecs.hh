@@ -75,6 +75,29 @@ private:
         }
 
         template<typename F>
+        void ForEachEntity(F const& f, bool skip_invalid = true) {
+            if(_ary.empty()) {
+                return;
+            }
+            size_t entity = 0;
+            uint8_t *entity_ptr = &_ary[0],
+                    *entity_end = &_ary[0] + _ary.size();
+            while(entity_ptr < entity_end) {
+                entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
+                
+                if((skip_invalid && entity_sz >= 0) || !skip_invalid) {
+                    bool stop = f(entity, entity_ptr);
+                    if(stop) {
+                        return;
+                    }
+                }
+                
+                entity_ptr += abs(entity_sz);
+                ++entity;
+            }
+        }
+
+        template<typename F>
         void ForEachComponentInEntity(uint8_t* entity_ptr, F const& f) {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
             if(entity_sz < 0) {
@@ -109,6 +132,41 @@ private:
                 }
                 return false;
             });
+        }
+
+        void Compress() {
+            vector<uint8_t> newary = {};
+            newary.reserve(_ary.size());   // avoids multiple resizing - we shrink it later
+
+            ForEachEntity([&](size_t entity, uint8_t* entity_ptr) {
+                entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
+                size_t current_newary = newary.size();
+                // if entity is not invalidated, add it to the new ary
+                if(entity_sz >= 0) {
+                    entity_size_t current_sz = sizeof(entity_size_t);
+                    newary.insert(end(newary), sizeof(entity_size_t), 0);  // placeholder
+                    // if component is not invalidated, add it to the new ary
+                    ForEachComponentInEntity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
+                        if(component->id != INVALIDATED_COMPONENT) {
+                            size_t sz = newary.size();
+                            newary.insert(end(newary), sizeof(Component) + component->sz, 0);
+                            memcpy(&newary[sz], component, sizeof(Component));
+                            memcpy(&newary[sz + sizeof(Component)], data, component->sz);
+                            current_sz += sizeof(Component) + component->sz;
+                        }
+                        return false;
+                    });
+                    // adjust entity size
+                    entity_size_t* entity_sz_ptr = reinterpret_cast<entity_size_t*>(&newary[current_newary]);
+                    *entity_sz_ptr = current_sz;
+                    // adjust _entities
+                    _entities[entity] = current_newary;
+                }
+                return false;
+            }, false);
+
+            newary.shrink_to_fit();
+            _ary = move(newary);
         }
 
     private:

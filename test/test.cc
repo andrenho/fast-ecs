@@ -156,7 +156,7 @@ TEST_F(RawTest, InvalidateEntities) {
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   3, 0,
         /* component 1:0 data*/  42, 0 }));
-    EXPECT_EQ(rd._entities, vector<size_t>({ numeric_limits<size_t>::max(), 16 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ rd.INVALIDATED_ENTITY, 16 }));
 
     EXPECT_ANY_THROW(rd.AddComponent(e1, sizeof my, 1, &my));
 }
@@ -164,8 +164,29 @@ TEST_F(RawTest, InvalidateEntities) {
 
 TEST_F(RawTest, Compress) {
     size_t e3 = rd.AddEntity();
+    struct MyComponent {
+        uint16_t a;
+    };
+    MyComponent my = { 42 };
+    rd.AddComponent(e1, sizeof my, 1, &my);
+    rd.AddComponent(e1, sizeof my, 2, &my);
+    rd.AddComponent(e2, sizeof my, 3, &my);
+    rd.AddComponent(e3, sizeof my, 4, &my);
+
+    rd.InvalidateEntity(e1);
+    rd.InvalidateComponent(e2, 3, [](void*){});
+    rd.Compress();
+    
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
+        /* entity 1 */           4, 0, 0, 0,
+        /* entity 2 */           10, 0, 0, 0,
+        /* component 1:0 size */ 2, 0,
+        /* component 1:0 id */   4, 0,
+        /* component 1:0 data*/  42, 0 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ rd.INVALIDATED_ENTITY, 0, 4, }));
 }
 
+// TODO - test different sizes
 
 }  // namespace ECS
 
