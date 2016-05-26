@@ -20,8 +20,16 @@ public:
     explicit ECSError(const char* what_arg) : runtime_error(what_arg) {}
 };
 
+/*
+template<
+    typename System,
+    uint64_t max_components, uint64_t max_entity_size, uint64_t max_component_size,
+    typename... Components>
+*/
 class Engine {
 private:
+    // {{{ RAW DATA INTERFACE
+
     template<typename entity_size_t    = int32_t,
              typename component_id_t   = uint16_t,
              typename component_size_t = uint16_t>
@@ -229,6 +237,8 @@ private:
             return idx + static_cast<size_t>(entity_sz);
         }
     };
+
+    // }}}
 
 };
 

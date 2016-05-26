@@ -186,7 +186,12 @@ TEST_F(RawTest, Compress) {
     EXPECT_EQ(rd._entities, vector<size_t>({ rd.INVALIDATED_ENTITY, 0, 4, }));
 }
 
-// TODO - test different sizes
+
+TEST_F(RawTest, DifferentSizes) {
+    FAIL();
+    // TODO
+}
+
 
 }  // namespace ECS
 
