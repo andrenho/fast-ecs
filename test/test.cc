@@ -145,7 +145,7 @@ TEST_F(RawTest, InvalidateEntities) {
 
     rd.InvalidateEntity(e1);
     EXPECT_EQ(rd._ary, vector<uint8_t>({ 
-        /* entity 0 */           0xFF, 0xFF, 0xFF, 0x00,  /* -16 */
+        /* entity 0 */           0xF0, 0xFF, 0xFF, 0xFF,  /* -16 */
         /* component 1:0 size */ 0xFF, 0xFF,
         /* component 1:0 id */   0xFF, 0xFF,
         /* component 1:0 data*/  0xFF, 0xFF,
@@ -160,6 +160,12 @@ TEST_F(RawTest, InvalidateEntities) {
 
     EXPECT_ANY_THROW(rd.AddComponent(e1, sizeof my, 1, &my));
 }
+
+
+TEST_F(RawTest, Compress) {
+    size_t e3 = rd.AddEntity();
+}
+
 
 }  // namespace ECS
 

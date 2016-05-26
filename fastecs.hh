@@ -58,8 +58,11 @@ private:
         }
 
         void InvalidateEntity(size_t entity) {
-            entity_size_t* entity_sz = reinterpret_cast<entity_size_t*>(entity_ptr);
+            // IMPORTANT: this doesn't call the destructor for the entities
+            entity_size_t* entity_sz = reinterpret_cast<entity_size_t*>(&_ary[_entities[entity]]);
+            memset(&_ary[_entities[entity] + sizeof(entity_size_t)], 0xFF, *entity_sz - sizeof(entity_size_t));
             *entity_sz = -(*entity_sz);
+            _entities[entity] = INVALIDATED_ENTITY;
         }
 
         void AddComponent(size_t entity, component_size_t sz, component_id_t id, void* data) {
@@ -114,6 +117,7 @@ private:
         FRIEND_TEST(RawTest, AddComponents);
         FRIEND_TEST(RawTest, InvalidateComponents);
         FRIEND_TEST(RawTest, InvalidateEntities);
+        FRIEND_TEST(RawTest, Compress);
 #endif
 
         std::vector<size_t> _entities = {};
