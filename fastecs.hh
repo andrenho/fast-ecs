@@ -5,11 +5,20 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
-#include <gtest/gtest_prod.h>
+#ifdef GTEST
+#  include <gtest/gtest_prod.h>
+#endif
 
 namespace ECS {
+
+class ECSError : public std::runtime_error {
+public:
+    explicit ECSError(std::string const& what_arg) : runtime_error(what_arg) {}
+    explicit ECSError(const char* what_arg) : runtime_error(what_arg) {}
+};
 
 class Engine {
 private:
@@ -28,9 +37,9 @@ private:
             component_id_t   id;
         };
 
+        static constexpr size_t INVALIDATED_ENTITY = std::numeric_limits<size_t>::max();
         static constexpr component_id_t INVALIDATED_COMPONENT = std::numeric_limits<component_id_t>::max();
 
-        // will always add an entity to the end of the vector
         size_t AddEntity() {
             // insert index in _entities
             _entities.push_back(_ary.size());
@@ -38,12 +47,6 @@ private:
             entity_size_t sz = static_cast<entity_size_t>(sizeof(entity_size_t));
             _ary_append_bytes(&sz, sz, -1);
             return _entities.size()-1;
-        }
-
-        // will try to reuse an entity
-        size_t AddEntity(size_t expected_size) {
-            // TODO
-            return 0;
         }
 
         bool IsEntityValid(size_t entity) {
@@ -54,12 +57,9 @@ private:
             return *reinterpret_cast<entity_size_t*>(&_ary[_entities[entity]]);
         }
 
-        void InvalidateEntity(Entity* entity) {
-            throw; // TODO
-        }
-
-        void RemoveIdentity(Entity* entity) {
-            throw; // TODO
+        void InvalidateEntity(size_t entity) {
+            entity_size_t* entity_sz = reinterpret_cast<entity_size_t*>(entity_ptr);
+            *entity_sz = -(*entity_sz);
         }
 
         void AddComponent(size_t entity, component_size_t sz, component_id_t id, void* data) {
@@ -72,13 +72,17 @@ private:
         }
 
         template<typename F>
-        void ForEachComponent(uint8_t* entity_ptr, F const& f) {
+        void ForEachComponentInEntity(uint8_t* entity_ptr, F const& f) {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
+            if(entity_sz < 0) {
+                throw ECSError("Using a removed entity");
+            }
+            uint8_t* initial_entity_ptr = entity_ptr;
             uint8_t* end = entity_ptr + entity_sz;
             entity_ptr += sizeof(entity_size_t);
             while(entity_ptr < end) {
                 Component* component = reinterpret_cast<Component*>(entity_ptr);
-                if(f(component, entity_ptr + sizeof(Component))) {
+                if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
                     return;
                 }
                 entity_ptr += component->sz + sizeof(Component);
@@ -88,7 +92,13 @@ private:
         template<typename F>
         void InvalidateComponent(size_t entity, component_id_t id, F const& destructor) {
             uint8_t* entity_ptr = &_ary[_entities[entity]];
-            ForEachComponent(entity_ptr, [&](Component* component, void* data) {
+
+            entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
+            if(entity_sz < 0) {
+                throw ECSError("Using a removed entity");
+            }
+
+            ForEachComponentInEntity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
                 if(id == component->id) {
                     destructor(data);
                     component->id = INVALIDATED_COMPONENT;
@@ -98,14 +108,13 @@ private:
             });
         }
 
-        void RemoveComponent(size_t entity, component_id_t id) {
-            throw; // TODO
-        }
-
     private:
+#ifdef GTEST
         FRIEND_TEST(RawTest, AddEntity);
         FRIEND_TEST(RawTest, AddComponents);
-        FRIEND_TEST(RawTest, RemoveComponents);
+        FRIEND_TEST(RawTest, InvalidateComponents);
+        FRIEND_TEST(RawTest, InvalidateEntities);
+#endif
 
         std::vector<size_t> _entities = {};
         std::vector<uint8_t> _ary = {};
@@ -125,11 +134,28 @@ private:
         }
 
         size_t _find_space_for_component(size_t entity, size_t total_sz) {
-            // adjust entity size
+            // find entity size
             size_t idx = _entities[entity];
+            if(idx == INVALIDATED_ENTITY) {
+                throw ECSError("Using a removed entity");
+            }
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(&_ary[idx]);
-            // TODO - reuse inactive components
-            // open space in _ary
+            
+            // check if we can reuse any inactive components
+            uint8_t* entity_ptr = &_ary[idx];
+            entity_size_t pos = -1;
+            ForEachComponentInEntity(entity_ptr, [&](Component* component, void*, entity_size_t offset) -> bool {
+                if(component->id == INVALIDATED_COMPONENT && component->sz <= entity_sz) {
+                    pos = offset;
+                    return true;
+                }
+                return false;
+            });
+            if(pos != -1) {
+                return idx + static_cast<size_t>(pos);
+            }
+
+            // we can't reuse inactive components, so we open space in _ary
             _ary.insert(begin(_ary) + idx + entity_sz, total_sz, 0);
             // adjust indexes
             for(auto it=begin(_entities)+entity+1; it != end(_entities); ++it) {
@@ -138,7 +164,7 @@ private:
             // adjust entity size
             entity_size_t* sz = reinterpret_cast<entity_size_t*>(&_ary[idx]);
             *sz = static_cast<entity_size_t>(entity_sz + total_sz);
-            return idx + entity_sz;
+            return idx + static_cast<size_t>(entity_sz);
         }
     };
 

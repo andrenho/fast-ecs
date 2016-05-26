@@ -19,17 +19,18 @@ protected:
     RawTest() : e1(rd.AddEntity()), e2(rd.AddEntity()) {}
 };
 
+
 TEST_F(RawTest, AddEntity) {
-    ASSERT_EQ(e1, 0);
-    ASSERT_EQ(rd.GetEntitySize(e1), 4);
+    EXPECT_EQ(e1, 0);
+    EXPECT_EQ(rd.GetEntitySize(e1), 4);
 
-    ASSERT_EQ(e2, 1);
-    ASSERT_EQ(rd.GetEntitySize(e2), 4);
+    EXPECT_EQ(e2, 1);
+    EXPECT_EQ(rd.GetEntitySize(e2), 4);
 
-    ASSERT_EQ(rd._entities, vector<size_t>({ 0, 4 }));
-    ASSERT_EQ(rd._ary, vector<uint8_t>({ 4, 0, 0, 0, 4, 0, 0, 0 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 4 }));
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 4, 0, 0, 0, 4, 0, 0, 0 }));
 
-    ASSERT_EQ(rd.IsEntityValid(e1), true);
+    EXPECT_EQ(rd.IsEntityValid(e1), true);
 }
 
 TEST_F(RawTest, AddComponents) {
@@ -38,17 +39,17 @@ TEST_F(RawTest, AddComponents) {
     };
     MyComponent my = { 42 };
     rd.AddComponent(e2, sizeof my, 7, &my);
-    ASSERT_EQ(rd._ary, vector<uint8_t>({ 
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
         /* entity 0 */           4, 0, 0, 0, 
         /* entity 1 */           10, 0, 0, 0, 
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   7, 0,
         /* component 1:0 data*/  42, 0 }));
-    ASSERT_EQ(rd._entities, vector<size_t>({ 0, 4 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 4 }));
 
     my.a = 33;
     rd.AddComponent(e1, sizeof my, 5, &my);
-    ASSERT_EQ(rd._ary, vector<uint8_t>({ 
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
         /* entity 0 */           10, 0, 0, 0, 
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   5, 0,
@@ -57,14 +58,14 @@ TEST_F(RawTest, AddComponents) {
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   7, 0,
         /* component 1:0 data*/  42, 0 }));
-    ASSERT_EQ(rd._entities, vector<size_t>({ 0, 10 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 10 }));
     
     struct MySecondComponent {
         uint8_t b;
     };
     MySecondComponent my2 = { 13 };
     rd.AddComponent(e1, sizeof my2, 2, &my2);
-    ASSERT_EQ(rd._ary, vector<uint8_t>({ 
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
         /* entity 0 */           15, 0, 0, 0, 
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   5, 0,
@@ -76,12 +77,12 @@ TEST_F(RawTest, AddComponents) {
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   7, 0,
         /* component 1:0 data*/  42, 0 }));
-    ASSERT_EQ(rd._entities, vector<size_t>({ 0, 15 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 15 }));
 }
 
 
 bool destroyed = false;
-TEST_F(RawTest, RemoveComponents) {
+TEST_F(RawTest, InvalidateComponents) {
     // add two components, to both entites
     struct MyComponent {
         uint16_t a;
@@ -89,21 +90,79 @@ TEST_F(RawTest, RemoveComponents) {
     };
     MyComponent my = { 42 };
     rd.AddComponent(e2, sizeof my, 7, &my);
+    rd.AddComponent(e2, sizeof my, 6, &my);
 
     auto destructor = [](void* my) { static_cast<MyComponent*>(my)->~MyComponent(); };
 
     rd.InvalidateComponent(e2, 7, destructor);
-    ASSERT_EQ(rd._ary, vector<uint8_t>({ 
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
         /* entity 0 */           4, 0, 0, 0, 
-        /* entity 1 */           10, 0, 0, 0, 
+        /* entity 1 */           16, 0, 0, 0, 
         /* component 1:0 size */ 2, 0,
         /* component 1:0 id */   0xFF, 0xFF,
+        /* component 1:0 data*/  42, 0,
+        /* component 1:1 size */ 2, 0,
+        /* component 1:1 id */   6, 0,
+        /* component 1:1 data*/  42, 0 }));
+    EXPECT_EQ(destroyed, true) << "destructor";
+
+    my.a = 52;
+    rd.AddComponent(e2, sizeof my, 4, &my);
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
+        /* entity 0 */           4, 0, 0, 0, 
+        /* entity 1 */           16, 0, 0, 0, 
+        /* component 1:0 size */ 2, 0,
+        /* component 1:0 id */   4, 0,
+        /* component 1:0 data*/  52, 0,
+        /* component 1:1 size */ 2, 0,
+        /* component 1:1 id */   6, 0,
+        /* component 1:1 data*/  42, 0 })) << "reuse component";
+}
+
+TEST_F(RawTest, InvalidateEntities) {
+    struct MyComponent {
+        uint16_t a;
+    };
+    MyComponent my = { 42 };
+    rd.AddComponent(e1, sizeof my, 1, &my);
+    rd.AddComponent(e1, sizeof my, 2, &my);
+    rd.AddComponent(e2, sizeof my, 3, &my);
+
+    // sanity check
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
+        /* entity 0 */           16, 0, 0, 0, 
+        /* component 1:0 size */ 2, 0,
+        /* component 1:0 id */   1, 0,
+        /* component 1:0 data*/  42, 0,
+        /* component 1:1 size */ 2, 0,
+        /* component 1:1 id */   2, 0,
+        /* component 1:1 data*/  42, 0,
+        /* entity 1 */           10, 0, 0, 0, 
+        /* component 1:0 size */ 2, 0,
+        /* component 1:0 id */   3, 0,
         /* component 1:0 data*/  42, 0 }));
-    ASSERT_EQ(destroyed, true);
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 16 }));
+
+    rd.InvalidateEntity(e1);
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 
+        /* entity 0 */           0xFF, 0xFF, 0xFF, 0x00,  /* -16 */
+        /* component 1:0 size */ 0xFF, 0xFF,
+        /* component 1:0 id */   0xFF, 0xFF,
+        /* component 1:0 data*/  0xFF, 0xFF,
+        /* component 1:1 size */ 0xFF, 0xFF,
+        /* component 1:1 id */   0xFF, 0xFF,
+        /* component 1:1 data*/  0xFF, 0xFF,
+        /* entity 1 */           10, 0, 0, 0,
+        /* component 1:0 size */ 2, 0,
+        /* component 1:0 id */   3, 0,
+        /* component 1:0 data*/  42, 0 }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ numeric_limits<size_t>::max(), 16 }));
+
+    EXPECT_ANY_THROW(rd.AddComponent(e1, sizeof my, 1, &my));
 }
 
+}  // namespace ECS
 
-}
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
