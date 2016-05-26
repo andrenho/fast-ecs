@@ -152,7 +152,7 @@ private:
                             newary.insert(end(newary), sizeof(Component) + component->sz, 0);
                             memcpy(&newary[sz], component, sizeof(Component));
                             memcpy(&newary[sz + sizeof(Component)], data, component->sz);
-                            current_sz += sizeof(Component) + component->sz;
+                            current_sz += static_cast<entity_size_t>(sizeof(Component) + component->sz);
                         }
                         return false;
                     });
