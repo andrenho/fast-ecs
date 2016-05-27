@@ -188,8 +188,24 @@ TEST_F(RawTest, Compress) {
 
 
 TEST_F(RawTest, DifferentSizes) {
-    FAIL();
-    // TODO
+    ECS::Engine::RawData<uint8_t, uint8_t, uint8_t> rd2;
+
+    e1 = rd2.AddEntity();
+    e2 = rd2.AddEntity();
+
+    struct MyComponent {
+        uint8_t a;
+    };
+    MyComponent my = { 42 };
+    rd2.AddComponent(e2, sizeof my, 7, &my);
+
+    EXPECT_EQ(rd2._ary, vector<uint8_t>({ 
+        /* entity 0 */           1,
+        /* entity 1 */           4,
+        /* component 1:0 size */ 1,
+        /* component 1:0 id */   7,
+        /* component 1:0 data*/  42, }));
+    EXPECT_EQ(rd2._entities, vector<size_t>({ 0, 1 }));
 }
 
 

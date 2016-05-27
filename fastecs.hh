@@ -184,6 +184,7 @@ private:
         FRIEND_TEST(RawTest, InvalidateComponents);
         FRIEND_TEST(RawTest, InvalidateEntities);
         FRIEND_TEST(RawTest, Compress);
+        FRIEND_TEST(RawTest, DifferentSizes);
 #endif
 
         std::vector<size_t> _entities = {};
