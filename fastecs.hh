@@ -41,7 +41,8 @@ public:
     //
     // COMPONENTS
     //
-    template<typename C, typename... P> void AddComponent(size_t entity, P&& ...pars) {
+    template<typename C, typename... P> 
+    void AddComponent(size_t entity, P&& ...pars) {
         C component(pars...);
         component_id_t id = component_id<C>();
         // TODO - store destructor?
@@ -58,6 +59,30 @@ public:
     //
     // ITERATION
     //
+    template<typename... C, typename F>
+    void ForEach(F const& user_function) {
+        // TODO - longjmp
+        rd.ForEachEntity([&](size_t entity, uint8_t* entity_ptr) {
+            user_function(entity, ForEachParameter<C>(entity_ptr)...);
+            return false;
+        });
+    }
+
+private:
+    template<typename C> C& ForEachParameter(uint8_t* entity_ptr) {
+        void* cdata = nullptr;
+        ForEachComponentInEntity(entity_ptr, [&](typename decltype(rd)::Component* c, uint8_t* data, entity_size_t) {
+            if(c->id == component_id<C>()) {
+                cdata = data;
+                return true;
+            }
+            return false;
+        });
+        if(!cdata) {
+            throw ECSError("Component not found.\n");
+        }
+        return *reinterpret_cast<C*>(cdata);
+    }
 
     //
     // SYSTEMS
