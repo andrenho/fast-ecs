@@ -43,6 +43,8 @@ public:
             });
             return false;
         });
+        // clear systems
+        for(auto it = _systems.rbegin(); it != _systems.rend(); ++it) { delete *it; }
     }
 
     // 
@@ -333,7 +335,7 @@ private:
 
         // TODO - const version
         template<typename F>
-        void ForEachComponentInEntity(uint8_t* entity_ptr, F const& f) {
+        void ForEachComponentInEntity(uint8_t* entity_ptr, F const& f, bool skip_invalid = true) {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
             if(entity_sz < 0) {
                 throw ECSError("Using a removed entity");
@@ -343,15 +345,17 @@ private:
             entity_ptr += sizeof(entity_size_t);
             while(entity_ptr < end) {
                 Component* component = reinterpret_cast<Component*>(entity_ptr);
-                if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
-                    return;
+                if((skip_invalid && component->id != INVALIDATED_COMPONENT) || !skip_invalid) {
+                    if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
+                        return;
+                    }
                 }
                 entity_ptr += component->sz + sizeof(Component);
             }
         }
 
         template<typename F>
-        void ForEachComponentInEntity(uint8_t const* entity_ptr, F const& f) const {
+        void ForEachComponentInEntity(uint8_t const* entity_ptr, F const& f, bool skip_invalid = true) const {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t const*>(entity_ptr);
             if(entity_sz < 0) {
                 throw ECSError("Using a removed entity");
@@ -361,8 +365,10 @@ private:
             entity_ptr += sizeof(entity_size_t);
             while(entity_ptr < end) {
                 Component const* component = reinterpret_cast<Component const*>(entity_ptr);
-                if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
-                    return;
+                if((skip_invalid && component->id != INVALIDATED_COMPONENT) || !skip_invalid) {
+                    if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
+                        return;
+                    }
                 }
                 entity_ptr += component->sz + sizeof(Component);
             }
@@ -477,7 +483,7 @@ private:
                     return true;
                 }
                 return false;
-            });
+            }, false);
             if(pos != -1) {
                 return idx + static_cast<size_t>(pos);
             }
@@ -582,7 +588,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
 
     RawData<entity_size_t, component_id_t, component_size_t> _rd = {};
     std::vector<std::function<void(void*)>> _destructors = { CreateDestructor<Components>()... };
-    //std::vector<size_t> _sizes = { sizeof(Components)... };
+    std::vector<size_t> _sizes = { sizeof(Components)... };
     std::vector<System*> _systems = {};
 };
 
