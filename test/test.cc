@@ -1,13 +1,15 @@
+#include <gtest/gtest.h>
+
 #include <vector>
 using namespace std;
-
-#include <gtest/gtest.h>
 
 #include "fastecs.hh"
 
 namespace ECS {
 
 // {{{ TEST RAWDATA
+
+bool destroyed = false;
 
 class RawTest : public ::testing::Test {
 protected:
@@ -83,7 +85,6 @@ TEST_F(RawTest, AddComponents) {
 }
 
 
-bool destroyed = false;
 TEST_F(RawTest, InvalidateComponents) {
     // add two components, to both entites
     struct MyComponent {
@@ -275,10 +276,21 @@ TEST_F(RawTest, IterateConst) {
 
 // }}}
 
+//------------------------------------------------------------------------
+
+class System {
+};
+
+int destroy_count = 0;
+
 class EngineTest : public ::testing::Test {
 protected:
-    class System {
-    };
+    EngineTest() : e1(e.AddEntity()), e2(e.AddEntity()) {
+        e.AddComponent<Position>(e1, 40.f, 50.f);
+        e.AddComponent<Direction>(e1, 60.f);
+
+        e.AddComponent<Direction>(e2, 70.f);
+    }
 
     struct Position {
         float x, y;
@@ -290,15 +302,83 @@ protected:
         Direction(float angle) : angle(angle) {}
     };
 
-    using MyEngine = ECS::Engine<System, Position, Direction>;
+    struct Destructable {
+        Destructable()  { ++destroy_count; cout << "+\n"; }
+        ~Destructable() { --destroy_count; cout << "-\n"; }
+    };
+
+    using MyEngine = ECS::Engine<System, Position, Direction, Destructable>;
     MyEngine e = {};
+
+    size_t e1, e2;
 };
 
-TEST_F(EngineTest, Add) {
-    size_t e1 = e.AddEntity();
-    e.AddComponent<Position>(e1, 40.f, 50.f);
-    e.AddComponent<Direction>(e1, 60.f);
+TEST_F(EngineTest, Read) {
+    EXPECT_TRUE(e.HasComponent<Position>(e1));
+    EXPECT_TRUE(e.HasComponent<Direction>(e1));
+    EXPECT_FALSE(e.HasComponent<Position>(e2));
+    EXPECT_TRUE(e.HasComponent<Direction>(e2));
+
+    int i=0;
+    e.ForEach<Position, Direction>([&](size_t entity, Position& pos, Direction& dir) {
+        EXPECT_EQ(entity, e1);
+        EXPECT_FLOAT_EQ(pos.x, 40.f);
+        EXPECT_FLOAT_EQ(pos.y, 50.f);
+        EXPECT_FLOAT_EQ(dir.angle, 60.f);
+        pos.x = 42.f;
+        ++i;
+    });
+    EXPECT_EQ(i, 1);
+
+    EXPECT_FLOAT_EQ(e.GetComponent<Position>(e1).x, 42.f);
+    EXPECT_FLOAT_EQ(e.GetComponent<Position>(e1).y, 50.f);
+
+    i=0;
+    float sum=0;
+    e.ForEach<Direction>([&](size_t, Direction& dir) {
+        sum += dir.angle;
+        ++i;
+    });
+    EXPECT_EQ(i, 2);
+    EXPECT_FLOAT_EQ(sum, 130.f);
 }
+
+
+TEST_F(EngineTest, Const) {
+    MyEngine const& ce = e;
+
+    EXPECT_TRUE(ce.HasComponent<Position>(e1));
+    EXPECT_FLOAT_EQ(ce.GetComponent<Position>(e1).y, 50.f);
+
+    int i=0;
+    ce.ForEach<Position, Direction>([&](size_t entity, Position const& pos, Direction const& dir) {
+        EXPECT_EQ(entity, e1);
+        EXPECT_FLOAT_EQ(pos.x, 40.f);
+        EXPECT_FLOAT_EQ(pos.y, 50.f);
+        EXPECT_FLOAT_EQ(dir.angle, 60.f);
+        ++i;
+    });
+    EXPECT_EQ(i, 1);
+}
+
+// TODO - check removal
+TEST_F(EngineTest, Removal) {
+	destroy_count = 0;
+	e.AddComponent<Destructable>(e1);
+    e.RemoveComponent<Destructable>(e1);
+    EXPECT_EQ(destroy_count, 0);
+    e.Compress();
+
+    // TODO - sanity check
+}
+
+// TODO - systems
+
+// TODO - add same component
+
+// TODO - errors
+
+// TODO - debugging
 
 }  // namespace ECS
 

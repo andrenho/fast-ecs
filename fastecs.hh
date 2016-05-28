@@ -1,10 +1,12 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#include <csetjmp>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <new>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -43,10 +45,49 @@ public:
     //
     template<typename C, typename... P> 
     void AddComponent(size_t entity, P&& ...pars) {
-        C component(pars...);
         component_id_t id = component_id<C>();
-        // TODO - store destructor?
-        rd.AddComponent(entity, sizeof component, id, &component);
+        // allocate space for the component, then initialize it
+        C* component = reinterpret_cast<C*>(rd.AddEmptyComponent(entity, sizeof(C), id));
+        new(component) C(pars...);
+    }
+
+    template<typename C>
+    C const& GetComponent(size_t entity) const {
+        void const* cdata = nullptr;
+        rd.ForEachComponentInEntity(rd.GetEntityPtr(entity), [&](typename decltype(rd)::Component const* c, uint8_t const* data, entity_size_t) {
+            if(c->id == component_id<C>()) {
+                cdata = data;
+                return true;
+            }
+            return false;
+        });
+        if(!cdata) {
+            throw ECSError("Entity does not contain this component.");
+        }
+        return *reinterpret_cast<C const*>(cdata);
+    }
+
+    template<typename C>
+    C& GetComponent(size_t entity) {
+        return const_cast<C&>(static_cast<const Engine<System, Components...>*>(this)->GetComponent<C>(entity));
+    }
+
+    template<typename C>
+    bool HasComponent(size_t entity) const
+    {
+        bool has = false;
+        rd.ForEachComponentInEntity(rd.GetEntityPtr(entity), [&](typename decltype(rd)::Component const* c, uint8_t const*, entity_size_t) {
+            if(c->id == component_id<C>()) {
+                has = true;
+                return true;
+            }
+            return false;
+        });
+        return has;
+    }
+
+    template<typename C>
+    void RemoveComponent(size_t entity) {
     }
 
     // 
@@ -60,18 +101,49 @@ public:
     // ITERATION
     //
     template<typename... C, typename F>
+    void ForEach(F const& user_function) const {
+
+        rd.ForEachEntity([&](size_t entity, uint8_t const* entity_ptr) {
+
+            // Here, we prepare for a longjmp. If the component C is not found
+            // when ForEachParameter is called, it calls longjmp, which skips
+            // calling the user function.
+            jmp_buf env_buffer;
+            int val = setjmp(env_buffer);
+
+            // Call the user function. `val` is 0 when the component is found.
+            if(val == 0) {
+                user_function(entity, ForEachParameter<C>(entity_ptr, env_buffer)...);
+            }
+
+            return false;
+        });
+    }
+
+    template<typename... C, typename F>
     void ForEach(F const& user_function) {
-        // TODO - longjmp
+
         rd.ForEachEntity([&](size_t entity, uint8_t* entity_ptr) {
-            user_function(entity, ForEachParameter<C>(entity_ptr)...);
+
+            // Here, we prepare for a longjmp. If the component C is not found
+            // when ForEachParameter is called, it calls longjmp, which skips
+            // calling the user function.
+            jmp_buf env_buffer;
+            int val = setjmp(env_buffer);
+
+            // Call the user function. `val` is 0 when the component is found.
+            if(val == 0) {
+                user_function(entity, ForEachParameter<C>(entity_ptr, env_buffer)...);
+            }
+
             return false;
         });
     }
 
 private:
-    template<typename C> C& ForEachParameter(uint8_t* entity_ptr) {
-        void* cdata = nullptr;
-        ForEachComponentInEntity(entity_ptr, [&](typename decltype(rd)::Component* c, uint8_t* data, entity_size_t) {
+    template<typename C> C const& ForEachParameter(uint8_t const* entity_ptr, jmp_buf env_buffer) const {
+        void const* cdata = nullptr;
+        rd.ForEachComponentInEntity(entity_ptr, [&](typename decltype(rd)::Component const* c, uint8_t const* data, entity_size_t) {
             if(c->id == component_id<C>()) {
                 cdata = data;
                 return true;
@@ -79,10 +151,15 @@ private:
             return false;
         });
         if(!cdata) {
-            throw ECSError("Component not found.\n");
+            longjmp(env_buffer, 1);
         }
-        return *reinterpret_cast<C*>(cdata);
+        return *reinterpret_cast<C const*>(cdata);
     }
+
+    template<typename C> C& ForEachParameter(uint8_t const* entity_ptr, jmp_buf env_buffer) {
+        return const_cast<C&>(static_cast<const Engine<System, Components...>*>(this)->ForEachParameter<C>(entity_ptr, env_buffer));
+    }
+public:
 
     //
     // SYSTEMS
@@ -130,11 +207,11 @@ private:
         }
 
         uint8_t* GetEntityPtr(size_t entity) {
-            return &_ary[entity];
+            return &_ary[_entities[entity]];
         }
 
         uint8_t const* GetEntityPtr(size_t entity) const {
-            return &_ary[entity];
+            return &_ary[_entities[entity]];
         }
 
         void InvalidateEntity(size_t entity) {
@@ -145,13 +222,16 @@ private:
             _entities[entity] = INVALIDATED_ENTITY;
         }
 
-        void AddComponent(size_t entity, component_size_t sz, component_id_t id, void* data) {
+        void* AddEmptyComponent(size_t entity, component_size_t sz, component_id_t id) {
             // create component
             Component component { sz, id };
-            // TODO - look for space for a existing component
             size_t idx = _find_space_for_component(entity, sizeof(Component) + sz);
             _ary_copy_bytes(&component, sizeof(Component), idx);
-            _ary_copy_bytes(data, sz, idx + sizeof(Component));
+            return &_ary[idx + sizeof(Component)];
+        }
+
+        void AddComponent(size_t entity, component_size_t sz, component_id_t id, void* data) {
+            memcpy(AddEmptyComponent(entity, sz, id), data, sz);
         }
 
         template<typename F>
@@ -257,7 +337,7 @@ private:
         }
 
         void Compress() {
-            vector<uint8_t> newary = {};
+            std::vector<uint8_t> newary = {};
             newary.reserve(_ary.size());   // avoids multiple resizing - we shrink it later
 
             ForEachEntity([&](size_t entity, uint8_t* entity_ptr) {
@@ -274,7 +354,7 @@ private:
                             newary.insert(end(newary), sizeof(Component) + component->sz, 0);
                             memcpy(&newary[sz], component, sizeof(Component));
                             memcpy(&newary[sz + sizeof(Component)], data, component->sz);
-                            current_sz += static_cast<entity_size_t>(sizeof(Component) + component->sz);
+                            current_sz = static_cast<entity_size_t>(current_sz + sizeof(Component) + component->sz);
                         }
                         return false;
                     });
