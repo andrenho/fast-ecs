@@ -279,6 +279,8 @@ TEST_F(RawTest, IterateConst) {
 //------------------------------------------------------------------------
 
 class System {
+public:
+    virtual ~System() {}
 };
 
 int destroy_count = 0;
@@ -303,8 +305,8 @@ protected:
     };
 
     struct Destructable {
-        Destructable()  { ++destroy_count; cout << "+\n"; }
-        ~Destructable() { --destroy_count; cout << "-\n"; }
+        Destructable()  { ++destroy_count; }
+        ~Destructable() { --destroy_count; }
     };
 
     using MyEngine = ECS::Engine<System, Position, Direction, Destructable>;
@@ -312,6 +314,7 @@ protected:
 
     size_t e1, e2;
 };
+
 
 TEST_F(EngineTest, Read) {
     EXPECT_TRUE(e.HasComponent<Position>(e1));
@@ -361,22 +364,62 @@ TEST_F(EngineTest, Const) {
     EXPECT_EQ(i, 1);
 }
 
-// TODO - check removal
-TEST_F(EngineTest, Removal) {
+
+TEST_F(EngineTest, ComponentRemoval) {
 	destroy_count = 0;
 	e.AddComponent<Destructable>(e1);
     e.RemoveComponent<Destructable>(e1);
     EXPECT_EQ(destroy_count, 0);
+
+    e.RemoveComponent<Direction>(e1);
+
+    // sanity check
+
+    int i=0; e.ForEach<Direction>([&](size_t, Direction&) { ++i; });
+    EXPECT_EQ(i, 1);
+
+    i=0; e.ForEach<Destructable>([&](size_t, Destructable&) { ++i; });
+    EXPECT_EQ(i, 0);
+
     e.Compress();
 
-    // TODO - sanity check
+    i=0; e.ForEach<Direction>([&](size_t, Direction&) { ++i; });
+    EXPECT_EQ(i, 1);
+
+    i=0; e.ForEach<Destructable>([&](size_t, Destructable&) { ++i; });
+    EXPECT_EQ(i, 0);
 }
 
-// TODO - systems
 
-// TODO - add same component
+TEST_F(EngineTest, EntityRemoval) {
+    destroy_count = 0;
+	e.AddComponent<Destructable>(e1);
+    e.RemoveEntity(e1);
+    EXPECT_EQ(destroy_count, 0);
 
-// TODO - errors
+    EXPECT_ANY_THROW(e.GetComponent<Position>(e1));
+}
+
+
+TEST_F(EngineTest, Systems) {
+    struct TestSystem : public System {
+        TestSystem(int i) : i(i) {}
+        void Execute(MyEngine&) { EXPECT_EQ(i, 2); }
+        int i;
+    };
+    e.AddSystem<TestSystem>(2);
+    EXPECT_EQ(e.GetSystem<TestSystem>().i, 2);
+    EXPECT_EQ(e.Systems().size(), 1); 
+}
+
+// add same component, reuse deleted component
+TEST_F(EngineTest, ReaddReuse) {
+    EXPECT_ANY_THROW(e.AddComponent<Direction>(e1, 70.f));
+    e.RemoveComponent<Direction>(e1);
+    /*
+    EXPECT_ANY_THROW(e.RemoveComponent<Direction>(e1));
+    */
+}
 
 // TODO - debugging
 
