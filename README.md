@@ -108,12 +108,16 @@ Engine<System, Components...>();   // create a new Engine
 //     Use "void" if you don't want to use any systems.
 // `Components...` is a list of all components (structs) 
 //     that can be added to the Engine.
+
+// Since you'll want to use the engine declaration everywhere
+// (pass to functions, etc), it is better to use a type-alias:
+using MyEngine = ECS::Engine<System, Position, Direction>;
 ```
 
 Entity management:
 
 ```C++
-Entity AddEntity();                // create a new entity
+size_t AddEntity();                // create a new entity
 void   RemoveEntity(Entity ent);   // delete an entity
 ```
 
@@ -138,38 +142,47 @@ struct Polygon {
 ```
 
 ```C++
-C&   AddComponent<C>(Entity ent, ...);   // add a new component to an entity, calling its constructor
-void RemoveComponent<C>(Entity ent);     // remove component from entity
+C&   AddComponent<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
+void RemoveComponent<C>(size_t entity);     // remove component from entity
 
-bool HasComponent<C>(Entity ent);        // return true if entity contains a component
-C&   GetComponent<C>(Entity ent);        // return a reference to a component
+bool HasComponent<C>(size_t entity);        // return true if entity contains a component
+C&   GetComponent<C>(size_t entity);        // return a reference to a component
 
 // When getting a component, it can be edited directly:
-e.GetComponent<Position>().x = 10;
+e.GetComponent<Position>(my_entity).x = 10;
 ```
 
 Iterating over entities: 
 
 ```C++
-void ForEach<C...>([](ECS::Entity, ...);
+void ForEach<C...>([](size_t entity, ...);
 
 // Example:
-e.ForEach<Position, Direction>([](ECS::Entity ent, Position& pos, Direction& dir) {
+e.ForEach<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
     // do something
 });
 ```
+
+Management:
+
+After deleting and readding many entities and components, the component array will become fragmented. So, eventually, is a good idea to compress the array, removing the spaces that were left:
+
+```C++
+void Compress();
+```
+
 
 Systems:
 
 ```C++
 // all systems must inherit from a single class
 struct System {
-    virtual void Execute(Engine<System>& e) = 0;
+    virtual void Execute(MyEngine& e) = 0;
     virtual ~System() {}
 }
 
 struct MySystem : public System {
-    void Execute(Engine<System>& e) override {
+    void Execute(MyEngine& e) override {
         // do something
     }
 };
