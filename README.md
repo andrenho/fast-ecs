@@ -231,4 +231,4 @@ Entity #0:
   - Direction: 50 rad
 ```
 
-If the `operator<<` is not implemented for a component, the class name will be print instead.
+If the `operator<<` is not implemented for a component, the class name will be printed instead.
