@@ -164,6 +164,11 @@ void ForEach<C...>([](size_t entity, ...);
 e.ForEach<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
     // do something
 });
+
+// There's also a const version of ForEach: 
+e.ForEach<Position, Direction>([](size_t ent, Position const& pos, Direction const& dir) {
+    // do something
+});
 ```
 
 Management:
@@ -173,7 +178,6 @@ After deleting and readding many entities and components, the component array wi
 ```C++
 void Compress();
 ```
-
 
 Systems:
 
@@ -221,6 +225,10 @@ e.Examine(cout, my_entity);
 
 // If you want to print all components of all entities:
 e.Examine(cout);
+
+// The result is:
+Entity #0:
+  - Direction: 50 rad
 ```
 
 If the `operator<<` is not implemented for a component, the class name will be print instead.
