@@ -13,6 +13,10 @@
 #include <type_traits>
 #include <vector>
 
+#ifndef NOABI
+#  include <cxxabi.h>
+#endif
+
 #ifdef GTEST
 #  include <gtest/gtest_prod.h>
 #endif
@@ -215,7 +219,7 @@ public:
     // DEBUGGING
     //
     void Examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
-        _rd.ForEachEntity([&](size_t entity, uint8_t const* entity_ptr) {
+        auto examine_entity = [&](size_t entity, uint8_t const* entity_ptr) {
             os << "Entity #" << entity << "\n";
             _rd.ForEachComponentInEntity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
                 os << "  - ";
@@ -224,7 +228,12 @@ public:
                 return false;
             });
             return false;
-        });
+        };
+        if(entity == std::numeric_limits<size_t>::max()) {
+            _rd.ForEachEntity(examine_entity);
+        } else {
+            examine_entity(entity, _rd.GetEntityPtr(entity));
+        }
     }
  
 private:
@@ -593,8 +602,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
         return tuple_index<C, ComponentTuple>::value;
     }
     
-    // check if class has debug method
-    /*
+    // check if class has operator<<
     template<typename T>
     struct has_ostream_method
     {
@@ -602,25 +610,36 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
         typedef std::true_type  yes;
         typedef std::false_type no;
 
-        template<typename U> static auto test(int) -> decltype(std::declval<U>().debug() == 1, yes());
+        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
         template<typename> static no test(...);
     public:
         static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
     };
-    */
-    // http://stackoverflow.com/questions/16044514/what-is-decltype-with-two-arguments
-    template<typename T>
-    struct has_ostream_method
-    {
-    private:
-        typedef std::true_type  yes;
-        typedef std::false_type no;
 
-        template<typename U> static auto test(int) -> decltype(std::declval<U>().operator<<(std::declval<ostream&>), yes());
-        template<typename> static no test(...);
-    public:
-        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
-    };
+    // execute operator<< of struct (with and without)
+    template<typename C, typename std::enable_if<has_ostream_method<C>::value>::type* = nullptr>
+    std::function<void(std::ostream&, void const*)> CreateDebugger() {
+        return [](std::ostream& os, void const* data) {
+            C const* c = reinterpret_cast<C const*>(data);
+            os << *c;
+        };
+    }
+
+    template<typename C, typename std::enable_if<!has_ostream_method<C>::value>::type* = nullptr>
+    std::function<void(std::ostream&, void const*)> CreateDebugger() {
+        return [](std::ostream& os, void const*) {
+            int status;
+            std::string tname = typeid(C).name();
+#ifndef NOABI
+            char *demangled_name = abi::__cxa_demangle(tname.c_str(), NULL, NULL, &status);
+            if(status == 0) {
+                tname = demangled_name;
+                free(demangled_name);
+            }
+#endif
+            os << tname;
+        };
+    }
 
     // }}}
 
@@ -628,19 +647,6 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
     std::function<void(void*)> CreateDestructor() {
         return [](void* data) {
             reinterpret_cast<C*>(data)->~C();
-        };
-    }
-
-    template<typename C>
-    std::function<void(std::ostream&, void const*)> CreateDebugger() {
-        return [](std::ostream& os, void const* data) {
-            C const* c = reinterpret_cast<C const*>(data);
-            (void) c;  // TODO
-            if(has_ostream_method<C>::value) {
-                os << "Yes";
-            } else {
-                os << "No";
-            }
         };
     }
 

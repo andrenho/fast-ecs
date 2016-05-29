@@ -8,17 +8,17 @@ ifeq ($(CXX),g++)
   CXXFLAGS += -fno-inline-small-functions
 endif
 
-all: test-fast-ecs #example
+all: test-fast-ecs example
 
 test-fast-ecs: test.o
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-#example: example.o
-#	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+example: example.o
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 test.o: test.cc ../fastecs.hh
 
-#example.o: example.cc ../fastecs.hh
+example.o: example.cc ../fastecs.hh
 
 lint:
 	clang-tidy ../fastecs.hh "-checks=*,-google-build-using-namespace,-google-readability-todo" -- --std=c++14

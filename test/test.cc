@@ -294,13 +294,11 @@ protected:
         e.AddComponent<Direction>(e2, 70.f);
     }
 
+public:
     struct Position {
         float x, y;
         Position(float x, float y) : x(x), y(y) {}
-        ostream& operator<< (ostream& stream) {
-            stream << "x";
-            return stream;
-        }
+        friend ostream& operator<<(ostream& out, Position const& pos);
     };
 
     struct Direction {
@@ -318,6 +316,11 @@ protected:
 
     size_t e1, e2;
 };
+
+ostream& operator<<(ostream& out, EngineTest::Position const& pos) {
+    out << "Position: " << pos.x << ", " << pos.y;
+    return out;
+}
 
 
 TEST_F(EngineTest, Read) {
@@ -420,9 +423,7 @@ TEST_F(EngineTest, Systems) {
 TEST_F(EngineTest, ReaddReuse) {
     EXPECT_ANY_THROW(e.AddComponent<Direction>(e1, 70.f));
     e.RemoveComponent<Direction>(e1);
-    /*
     EXPECT_ANY_THROW(e.RemoveComponent<Direction>(e1));
-    */
 }
 
 TEST_F(EngineTest, Debugging) {
