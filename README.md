@@ -117,7 +117,7 @@ using MyEngine = ECS::Engine<System, Position, Direction>;
 Entity management:
 
 ```C++
-size_t AddEntity();                // create a new entity
+size_t AddEntity();                // create a new entity, and return that entity identifier number
 void   RemoveEntity(Entity ent);   // delete an entity
 ```
 
