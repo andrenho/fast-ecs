@@ -138,8 +138,11 @@ struct Position {
 struct Polygon {
     vector<Point> points = {};
 };
-
 ```
+
+Avoid using pointers in components, as it defeats the porpouse of the high speed array of this library.
+
+Also, remeber that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their number.
 
 ```C++
 C&   AddComponent<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
