@@ -9,14 +9,18 @@
 struct Position {
     Position(float x, float y) : x(x), y(y) {}
     float x, y;
-    COMP_ID(0);     // uniquely identify the component
 };
 
 struct Direction {
     Direction(float angle) : angle(angle) {}
     float angle;
-    COMP_ID(1);
 };
+
+// 
+// ENGINE
+//
+
+using MyEngine = ECS::Engine<class System, Position, Direction>;
 
 //
 // SYSTEMS
@@ -24,14 +28,14 @@ struct Direction {
 
 class System { 
 public:
-    virtual void Execute(ECS::Engine<System>& e) = 0;
+    virtual void Execute(MyEngine& e) = 0;
     virtual ~System() {}
 };
 
 class PositionSystem : public System {
 public:
-    void Execute(ECS::Engine<System>& e) override {
-        e.ForEach<Position>([](ECS::Entity entity, Position& pos) {
+    void Execute(MyEngine& e) override {
+        e.ForEach<Position>([](size_t entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
@@ -41,8 +45,8 @@ public:
 
 class DirectionSystem : public System {
 public:
-    void Execute(ECS::Engine<System>& e) override {
-        e.ForEach<Direction>([](ECS::Entity entity, Direction& dir) {
+    void Execute(MyEngine& e) override {
+        e.ForEach<Direction>([](size_t entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
@@ -54,10 +58,10 @@ public:
 
 int main()
 {
-    ECS::Engine<System> e;
+    MyEngine e;
 
-    ECS::Entity e1 = e.CreateEntity(),
-                e2 = e.CreateEntity();
+    size_t e1 = e.AddEntity(),
+           e2 = e.AddEntity();
 
     e.AddComponent<Position>(e1, 20.f, 30.f);
     e.AddComponent<Direction>(e1, 1.2f);

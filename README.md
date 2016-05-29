@@ -21,14 +21,18 @@ A C++14 fast, storage-wise, header-only Entity Component System library.
 struct Position {
     Position(float x, float y) : x(x), y(y) {}
     float x, y;
-    COMP_ID(0);     // uniquely identify the component
 };
 
 struct Direction {
     Direction(float angle) : angle(angle) {}
     float angle;
-    COMP_ID(1);
 };
+
+// 
+// ENGINE
+//
+
+using MyEngine = ECS::Engine<class System, Position, Direction>;
 
 //
 // SYSTEMS
@@ -36,14 +40,14 @@ struct Direction {
 
 class System { 
 public:
-    virtual void Execute(ECS::Engine<System>& e) = 0;
+    virtual void Execute(MyEngine& e) = 0;
     virtual ~System() {}
 };
 
 class PositionSystem : public System {
 public:
-    void Execute(ECS::Engine<System>& e) override {
-        e.ForEach<Position>([](ECS::Entity entity, Position& pos) {
+    void Execute(MyEngine& e) override {
+        e.ForEach<Position>([](size_t entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
@@ -53,8 +57,8 @@ public:
 
 class DirectionSystem : public System {
 public:
-    void Execute(ECS::Engine<System>& e) override {
-        e.ForEach<Direction>([](ECS::Entity entity, Direction& dir) {
+    void Execute(MyEngine& e) override {
+        e.ForEach<Direction>([](size_t entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
@@ -66,10 +70,10 @@ public:
 
 int main()
 {
-    ECS::Engine<System> e;
+    MyEngine e;
 
-    ECS::Entity e1 = e.CreateEntity(),
-                e2 = e.CreateEntity();
+    size_t e1 = e.AddEntity(),
+           e2 = e.AddEntity();
 
     e.AddComponent<Position>(e1, 20.f, 30.f);
     e.AddComponent<Direction>(e1, 1.2f);
@@ -84,13 +88,14 @@ int main()
         sys->Execute(e);
     }
 }
+```
 
-/* Result:
+The result is:
 
+```
 Entity 0 position.x was 20 but now is 21.
 Entity 1 position.x was 100 but now is 101.
 Entity 0 direction is 1.2.
-*/
 ```
 
 # API
@@ -98,53 +103,80 @@ Entity 0 direction is 1.2.
 Engine management:
 
 ```C++
-Engine<System>();   // create a new Engine
-// System is the parent class for all systems. It can be left blank if systems are not used.
+Engine<System, Components...>();   // create a new Engine
+// `System` is the parent class for all systems. 
+//     Use "void" if you don't want to use any systems.
+// `Components...` is a list of all components (structs) 
+//     that can be added to the Engine.
 
-void Reset();       // remove all entities, components and systems
+// Since you'll want to use the engine declaration everywhere
+// (pass to functions, etc), it is better to use a type-alias:
+using MyEngine = ECS::Engine<System, Position, Direction>;
 ```
 
 Entity management:
 
 ```C++
-Entity CreateEntity();             // create a new entity
+size_t AddEntity();                // create a new entity, and return that entity identifier number
 void   RemoveEntity(Entity ent);   // delete an entity
-size_t EntityCount();              // return the number of entities
 ```
 
 Component management:
 
 
 ```C++
-// Every component is a class/struct must contain a unique ID. Example:
+// A component is simply a struct.
 
 struct Position {
     double x, y;
-    COMP_ID(1);    // a different identifier must be set for each component
-}
+    Position(double x, double y) : x(x), y(y) {}
+};
+
+// More complex components can be used. The destructor will be 
+// called when the component is destroyed.
+
+struct Polygon {
+    vector<Point> points = {};
+};
 ```
 
-```C++
-C&   AddComponent<C>(Entity ent, ...);   // add a new component to an entity, calling its constructor
-void RemoveComponent<C>(Entity ent);     // remove component from entity
-void RemoveAllComponents();              // clear an entity (good for entity reuse without deleting)
+Avoid using pointers in components, as it defeats the porpouse of the high speed array of this library.
 
-bool HasComponent<C>(Entity ent);        // return true if entity contains a component
-C&   GetComponent<C>(Entity ent);        // return a reference to a component
+Also, remeber that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their number.
+
+```C++
+C&   AddComponent<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
+void RemoveComponent<C>(size_t entity);     // remove component from entity
+
+bool HasComponent<C>(size_t entity);        // return true if entity contains a component
+C&   GetComponent<C>(size_t entity);        // return a reference to a component
 
 // When getting a component, it can be edited directly:
-e.GetComponent<Position>().x = 10;
+e.GetComponent<Position>(my_entity).x = 10;
 ```
 
 Iterating over entities: 
 
 ```C++
-void ForEach<C...>([](ECS::Entity, ...);
+void ForEach<C...>([](size_t entity, ...);
 
 // Example:
-e.ForEach<Position, Direction>([](ECS::Entity ent, Position& pos, Direction& dir) {
+e.ForEach<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
     // do something
 });
+
+// There's also a const version of ForEach: 
+e.ForEach<Position, Direction>([](size_t ent, Position const& pos, Direction const& dir) {
+    // do something
+});
+```
+
+Management:
+
+After deleting and readding many entities and components, the component array will become fragmented. So, eventually, is a good idea to compress the array, removing the spaces that were left:
+
+```C++
+void Compress();
 ```
 
 Systems:
@@ -152,12 +184,12 @@ Systems:
 ```C++
 // all systems must inherit from a single class
 struct System {
-    virtual void Execute(Engine<System>& e) = 0;
+    virtual void Execute(MyEngine& e) = 0;
     virtual ~System() {}
 }
 
 struct MySystem : public System {
-    void Execute(Engine<System>& e) override {
+    void Execute(MyEngine& e) override {
         // do something
     }
 };
@@ -173,21 +205,30 @@ for(auto& sys: e.Systems()) {
 // You can only add one system of each type (class).
 ```
 
-Debugging:
+# Component printing
+
+To be able to print a component, the `operator<<` must be implemented. Example:
 
 ```C++
-// for debugging, you need to compile with -DDEBUG or use
-#define DEBUG 1
-
-// each component needs to have a method with the following signature
-struct Component {
-    string to_str() const;
-    // ...
+struct Direction {
+    float angle;
+    friend ostream& operator<<(ostream& out, Direction const& dir);
 };
 
-// then, to inspect all the entities
-void Examine<C...>();	 // where "C..." is a list of all components
+ostream& operator<<(ostream& out, Direction const& dir) {
+    out << "Direction: " << dir.angle << " rad";
+    return out;
+}
 
-// example:
-e.Examine<Position, Direction>();
+// Then, to print all components of an entity:
+e.Examine(cout, my_entity);
+
+// If you want to print all components of all entities:
+e.Examine(cout);
+
+// The result is:
+Entity #0:
+  - Direction: 50 rad
 ```
+
+If the `operator<<` is not implemented for a component, the class name will be print instead.
