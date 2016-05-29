@@ -297,6 +297,10 @@ protected:
     struct Position {
         float x, y;
         Position(float x, float y) : x(x), y(y) {}
+        ostream& operator<< (ostream& stream) {
+            stream << "x";
+            return stream;
+        }
     };
 
     struct Direction {
@@ -421,7 +425,9 @@ TEST_F(EngineTest, ReaddReuse) {
     */
 }
 
-// TODO - debugging
+TEST_F(EngineTest, Debugging) {
+    e.Examine(cout);
+}
 
 }  // namespace ECS
 

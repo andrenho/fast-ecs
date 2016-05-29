@@ -210,6 +210,22 @@ public:
     }
 
     std::vector<System*> const& Systems() const { return _systems; }
+
+    //
+    // DEBUGGING
+    //
+    void Examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
+        _rd.ForEachEntity([&](size_t entity, uint8_t const* entity_ptr) {
+            os << "Entity #" << entity << "\n";
+            _rd.ForEachComponentInEntity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
+                os << "  - ";
+                _debuggers[c->id](os, data);
+                os << "\n";
+                return false;
+            });
+            return false;
+        });
+    }
  
 private:
     // {{{ RAW DATA INTERFACE
@@ -529,7 +545,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
 */
 
     // {{{ TEMPLATE MAGIC
-
+    
     // "function" that returns a signed integer type based on the number
     template<size_t n, typename = void> struct SignedDataTypeImpl;
     template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n <= std::numeric_limits<int8_t>::max())>::type> { using type = int8_t; };
@@ -577,6 +593,35 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
         return tuple_index<C, ComponentTuple>::value;
     }
     
+    // check if class has debug method
+    /*
+    template<typename T>
+    struct has_ostream_method
+    {
+    private:
+        typedef std::true_type  yes;
+        typedef std::false_type no;
+
+        template<typename U> static auto test(int) -> decltype(std::declval<U>().debug() == 1, yes());
+        template<typename> static no test(...);
+    public:
+        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
+    };
+    */
+    // http://stackoverflow.com/questions/16044514/what-is-decltype-with-two-arguments
+    template<typename T>
+    struct has_ostream_method
+    {
+    private:
+        typedef std::true_type  yes;
+        typedef std::false_type no;
+
+        template<typename U> static auto test(int) -> decltype(std::declval<U>().operator<<(std::declval<ostream&>), yes());
+        template<typename> static no test(...);
+    public:
+        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
+    };
+
     // }}}
 
     template<typename C>
@@ -586,8 +631,22 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
         };
     }
 
+    template<typename C>
+    std::function<void(std::ostream&, void const*)> CreateDebugger() {
+        return [](std::ostream& os, void const* data) {
+            C const* c = reinterpret_cast<C const*>(data);
+            (void) c;  // TODO
+            if(has_ostream_method<C>::value) {
+                os << "Yes";
+            } else {
+                os << "No";
+            }
+        };
+    }
+
     RawData<entity_size_t, component_id_t, component_size_t> _rd = {};
     std::vector<std::function<void(void*)>> _destructors = { CreateDestructor<Components>()... };
+    std::vector<std::function<void(std::ostream&, void const*)>> _debuggers = { CreateDebugger<Components>()... };
     std::vector<size_t> _sizes = { sizeof(Components)... };
     std::vector<System*> _systems = {};
 };
