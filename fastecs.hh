@@ -631,7 +631,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
             int status;
             std::string tname = typeid(C).name();
 #ifndef NOABI
-            char *demangled_name = abi::__cxa_demangle(tname.c_str(), NULL, NULL, &status);
+            char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
             if(status == 0) {
                 tname = demangled_name;
                 free(demangled_name);

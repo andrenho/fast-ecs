@@ -103,36 +103,43 @@ Entity 0 direction is 1.2.
 Engine management:
 
 ```C++
-Engine<System>();   // create a new Engine
-// System is the parent class for all systems. It can be left blank if systems are not used.
-
-void Reset();       // remove all entities, components and systems
+Engine<System, Components...>();   // create a new Engine
+// `System` is the parent class for all systems. 
+//     Use "void" if you don't want to use any systems.
+// `Components...` is a list of all components (structs) 
+//     that can be added to the Engine.
 ```
 
 Entity management:
 
 ```C++
-Entity CreateEntity();             // create a new entity
+Entity AddEntity();                // create a new entity
 void   RemoveEntity(Entity ent);   // delete an entity
-size_t EntityCount();              // return the number of entities
 ```
 
 Component management:
 
 
 ```C++
-// Every component is a class/struct must contain a unique ID. Example:
+// A component is simply a struct.
 
 struct Position {
     double x, y;
-    COMP_ID(1);    // a different identifier must be set for each component
-}
+    Position(double x, double y) : x(x), y(y) {}
+};
+
+// More complex components can be used. The destructor will be 
+// called when the component is destroyed.
+
+struct Polygon {
+    vector<Point> points = {};
+};
+
 ```
 
 ```C++
 C&   AddComponent<C>(Entity ent, ...);   // add a new component to an entity, calling its constructor
 void RemoveComponent<C>(Entity ent);     // remove component from entity
-void RemoveAllComponents();              // clear an entity (good for entity reuse without deleting)
 
 bool HasComponent<C>(Entity ent);        // return true if entity contains a component
 C&   GetComponent<C>(Entity ent);        // return a reference to a component
@@ -178,21 +185,26 @@ for(auto& sys: e.Systems()) {
 // You can only add one system of each type (class).
 ```
 
-Debugging:
+# Component printing
+
+To be able to print a component, the `operator<<` must be implemented. Example:
 
 ```C++
-// for debugging, you need to compile with -DDEBUG or use
-#define DEBUG 1
-
-// each component needs to have a method with the following signature
-struct Component {
-    string to_str() const;
-    // ...
+struct Direction {
+    float angle;
+    friend ostream& operator<<(ostream& out, Direction const& dir);
 };
 
-// then, to inspect all the entities
-void Examine<C...>();	 // where "C..." is a list of all components
+ostream& operator<<(ostream& out, Direction const& dir) {
+    out << "Direction: " << dir.angle << " rad";
+    return out;
+}
 
-// example:
-e.Examine<Position, Direction>();
+// Then, to print all components of an entity:
+e.Examine(cout, my_entity);
+
+// If you want to print all components of all entities:
+e.Examine(cout);
 ```
+
+If the `operator<<` is not implemented for a component, the class name will be print instead.
