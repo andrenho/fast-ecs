@@ -85,6 +85,20 @@ public:
 
     template<typename C>
     C const& GetComponent(size_t entity) const {
+        C const* component = GetComponentPtr<C>(entity);
+        if(component == nullptr) {
+            throw ECSError("Entity does not contain this component.");
+        }
+        return *component;
+    }
+
+    template<typename C>
+    C& GetComponent(size_t entity) {
+        return const_cast<C&>(static_cast<const Engine<System, Components...>*>(this)->GetComponent<C>(entity));
+    }
+
+    template<typename C>
+    C const* GetComponentPtr(size_t entity) const {
         void const* cdata = nullptr;
         _rd.ForEachComponentInEntity(_rd.GetEntityPtr(entity), [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
             if(c->id == component_id<C>()) {
@@ -94,14 +108,14 @@ public:
             return false;
         });
         if(!cdata) {
-            throw ECSError("Entity does not contain this component.");
+            return nullptr;
         }
-        return *reinterpret_cast<C const*>(cdata);
+        return reinterpret_cast<C const*>(cdata);
     }
 
     template<typename C>
-    C& GetComponent(size_t entity) {
-        return const_cast<C&>(static_cast<const Engine<System, Components...>*>(this)->GetComponent<C>(entity));
+    C* GetComponentPtr(size_t entity) {
+        return const_cast<C*>(static_cast<const Engine<System, Components...>*>(this)->GetComponentPtr<C>(entity));
     }
 
     template<typename C>

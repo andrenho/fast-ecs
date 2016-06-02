@@ -155,6 +155,10 @@ C&   GetComponent<C>(size_t entity);        // return a reference to a component
 
 // When getting a component, it can be edited directly:
 e.GetComponent<Position>(my_entity).x = 10;
+
+// `GetComponentPtr` will return a pointer for the component, or nullptr if it doesn't exist.
+// Thus, it can be used as a faster combination of `HasComponent` and `GetComponent`
+C*   GetComponentPtr<C>(size_t entity);
 ```
 
 Iterating over entities: 
