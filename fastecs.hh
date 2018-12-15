@@ -37,6 +37,7 @@ public:
 // }}}
 
 using NoQueue = std::variant<int>;
+using NoSystem = void;
 
 template<
     typename System,

@@ -34,7 +34,7 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ECS::Engine<class System, Position, Direction>;
+using MyEngine = ECS::Engine<class System, ECS::NoQueue, Position, Direction>;
 
 //
 // SYSTEMS
@@ -105,15 +105,17 @@ Entity 0 direction is 1.2.
 Engine management:
 
 ```C++
-Engine<System, Components...>();   // create a new Engine
+Engine<System, EventType, Components...>();   // create a new Engine
 // `System` is the parent class for all systems. 
-//     Use "void" if you don't want to use any systems.
+//     Use `ECS::NoSystem` if you don't want to use any systems.
+// `EventType` is a variant type that contains all event types.
+//     Use `ECS::NoQueue` if you don't want to use an event queue.
 // `Components...` is a list of all components (structs) 
 //     that can be added to the Engine.
 
 // Since you'll want to use the engine declaration everywhere
 // (pass to functions, etc), it is better to use a type-alias:
-using MyEngine = ECS::Engine<System, Position, Direction>;
+using MyEngine = ECS::Engine<System, EventType, Position, Direction>;
 ```
 
 Entity management:
@@ -124,7 +126,6 @@ void   RemoveEntity(Entity ent);   // delete an entity
 ```
 
 Component management:
-
 
 ```C++
 // A component is simply a struct.
@@ -209,6 +210,38 @@ for(auto& sys: e.Systems()) {
 }
 
 // You can only add one system of each type (class).
+```
+
+Event queues:
+
+Events queues can be used by a system to send messages to all systems. The message
+type must be a `std::variant` that contains all message types.
+
+```C++
+#include <variant>
+
+// Define the message types.
+struct EventDialog { std::string msg; };
+struct EventKill   { size_t id; };
+using EventType = std::variant<EventDialog, EventKill>;
+
+// Create engine passing this type.
+using MyEngine = ECS::Engine<System, EventType, MyComponents...>;
+MyEngine e;
+
+// Send an event to all systems.
+e.Send(EventDialog { "Hello!"; });
+
+// In the system, `GetEvents` can be used to read each of the messages in the event queue.
+// This will not clear the events from the queue, as other system might want to read it as well.
+for (EventDialog const& ev: e.GetEvents<EventDialog>()) {
+    // do something with `dialog_ev`...
+}
+
+// At the end of each loop, the queue must be cleared.
+for(auto& sys: e.Systems())
+    sys->Execute(e);
+e.ClearQueue();
 ```
 
 # Component printing
