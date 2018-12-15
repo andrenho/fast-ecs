@@ -230,7 +230,7 @@ using MyEngine = ECS::Engine<System, EventType, MyComponents...>;
 MyEngine e;
 
 // Send an event to all systems.
-e.Send(EventDialog { "Hello!"; });
+e.Send(EventDialog { "Hello!" });
 
 // In the system, `GetEvents` can be used to read each of the messages in the event queue.
 // This will not clear the events from the queue, as other system might want to read it as well.
