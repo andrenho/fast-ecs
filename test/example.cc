@@ -20,7 +20,7 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ECS::Engine<class System, Position, Direction>;
+using MyEngine = ECS::Engine<class System, ECS::NoQueue, Position, Direction>;
 
 //
 // SYSTEMS

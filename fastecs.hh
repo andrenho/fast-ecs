@@ -1,6 +1,7 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#include <algorithm>
 #include <csetjmp>
 #include <cstdint>
 #include <cstdlib>
@@ -12,6 +13,7 @@
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
+#include <variant>
 #include <vector>
 
 #ifndef NOABI
@@ -34,8 +36,11 @@ public:
 
 // }}}
 
+using NoQueue = std::variant<int>;
+
 template<
     typename System,
+    typename Event,
     typename... Components>
 class Engine {
 public:
@@ -94,7 +99,7 @@ public:
 
     template<typename C>
     C& GetComponent(size_t entity) {
-        return const_cast<C&>(static_cast<const Engine<System, Components...>*>(this)->GetComponent<C>(entity));
+        return const_cast<C&>(static_cast<const Engine<System, Event, Components...>*>(this)->GetComponent<C>(entity));
     }
 
     template<typename C>
@@ -115,7 +120,7 @@ public:
 
     template<typename C>
     C* GetComponentPtr(size_t entity) {
-        return const_cast<C*>(static_cast<const Engine<System, Components...>*>(this)->GetComponentPtr<C>(entity));
+        return const_cast<C*>(static_cast<const Engine<System, Event, Components...>*>(this)->GetComponentPtr<C>(entity));
     }
 
     template<typename C>
@@ -206,7 +211,7 @@ private:
     }
 
     template<typename C> C& ForEachParameter(uint8_t const* entity_ptr, jmp_buf env_buffer) {
-        return const_cast<C&>(static_cast<const Engine<System, Components...>*>(this)->ForEachParameter<C>(entity_ptr, env_buffer));
+        return const_cast<C&>(static_cast<const Engine<System, Event, Components...>*>(this)->ForEachParameter<C>(entity_ptr, env_buffer));
     }
 public:
 
@@ -231,8 +236,29 @@ public:
     std::vector<System*> const& Systems() const { return _systems; }
 
     //
+    // QUEUE
+    //
+public:
+    void Send(Event ev) { _events.push_back(std::move(ev)); }
+
+    template <typename T>
+    std::vector<T> GetEvents() const {
+        std::vector<T> r;
+        for (auto ev : _events)
+            if (std::holds_alternative<T>(ev))
+                r.push_back(std::get<T>(ev));
+        return r;
+    }
+
+    void ClearQueue() { _events.clear(); }
+
+private:
+    std::vector<Event> _events {};
+
+    //
     // DEBUGGING
     //
+public:
     void Examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
         auto examine_entity = [&](size_t entity, uint8_t const* entity_ptr) {
             os << "Entity #" << entity << "\n";
@@ -251,7 +277,9 @@ public:
         }
     }
  
+#ifndef GTEST
 private:
+#endif
     // {{{ RAW DATA INTERFACE
 
     template<typename entity_size_t, typename component_id_t, typename component_size_t>
@@ -304,7 +332,7 @@ private:
         }
 
         uint8_t* GetEntityPtr(size_t entity) {
-            return const_cast<uint8_t*>(static_cast<const Engine<System, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->GetEntityPtr(entity));
+            return const_cast<uint8_t*>(static_cast<const Engine<System, Event, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->GetEntityPtr(entity));
         }
 
         void InvalidateEntity(size_t entity) {

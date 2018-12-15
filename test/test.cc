@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <string>
+#include <variant>
 #include <vector>
 using namespace std;
 
@@ -13,7 +15,7 @@ bool destroyed = false;
 
 class RawTest : public ::testing::Test {
 protected:
-    using RawData = ECS::Engine<int,int>::RawData<int32_t, uint16_t, uint16_t>;
+    using RawData = ECS::Engine<int,ECS::NoQueue,int>::RawData<int32_t, uint16_t, uint16_t>;
     RawData rd = {};
 
 public:
@@ -191,7 +193,7 @@ TEST_F(RawTest, Compress) {
 
 
 TEST_F(RawTest, DifferentSizes) {
-    ECS::Engine<int,int>::RawData<int8_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,ECS::NoQueue,int>::RawData<int8_t, uint8_t, uint8_t> rd2;
 
     e1 = rd2.AddEntity();
     e2 = rd2.AddEntity();
@@ -213,7 +215,7 @@ TEST_F(RawTest, DifferentSizes) {
 
 
 TEST_F(RawTest, InvalidSizes) {
-    ECS::Engine<int,int>::RawData<int16_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,ECS::NoQueue,int>::RawData<int16_t, uint8_t, uint8_t> rd2;
     e1 = rd2.AddEntity();
 
     /*
@@ -233,7 +235,7 @@ TEST_F(RawTest, InvalidSizes) {
     */
 
     // entity too large
-    ECS::Engine<int,int>::RawData<int8_t, uint8_t, uint8_t> rd3;
+    ECS::Engine<int,ECS::NoQueue,int>::RawData<int8_t, uint8_t, uint8_t> rd3;
     e1 = rd3.AddEntity();
     struct Medium {
         uint8_t medium[100];
@@ -264,7 +266,7 @@ TEST_F(RawTest, IterateConst) {
     });
 
     // const
-    ECS::Engine<int,int>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
+    ECS::Engine<int,ECS::NoQueue,int>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
     rdc.ForEachEntity([](size_t entity, uint8_t const*) { EXPECT_EQ(entity, 0); return true; });
     rdc.ForEachComponentInEntity(rdc.GetEntityPtr(e1), [](decltype(rd)::Component const* c, void const* data, int32_t) {
         EXPECT_EQ(c->id, 7);
@@ -277,6 +279,10 @@ TEST_F(RawTest, IterateConst) {
 // }}}
 
 //------------------------------------------------------------------------
+
+struct EventTypeA { size_t id; };
+struct EventTypeB { string abc; };
+using Event = variant<EventTypeA, EventTypeB>;
 
 class System {
 public:
@@ -311,7 +317,7 @@ public:
         ~Destructable() { --destroy_count; }
     };
 
-    using MyEngine = ECS::Engine<System, Position, Direction, Destructable>;
+    using MyEngine = ECS::Engine<System, Event, Position, Direction, Destructable>;
     MyEngine e = {};
 
     size_t e1, e2;
@@ -424,6 +430,20 @@ TEST_F(EngineTest, ReaddReuse) {
     EXPECT_ANY_THROW(e.AddComponent<Direction>(e1, 70.f));
     e.RemoveComponent<Direction>(e1);
     EXPECT_ANY_THROW(e.RemoveComponent<Direction>(e1));
+}
+
+TEST_F(EngineTest, Queue) {
+    e.Send(EventTypeA { 12 });
+    e.Send(EventTypeA { 24 });
+    e.Send(EventTypeB { "Hello" });
+    EXPECT_EQ(e.GetEvents<EventTypeA>().size(), 2);
+    EXPECT_EQ(e.GetEvents<EventTypeA>().at(0).id, 12);
+    EXPECT_EQ(e.GetEvents<EventTypeA>().at(1).id, 24);
+    EXPECT_EQ(e.GetEvents<EventTypeA>().at(1).id, 24);
+    EXPECT_EQ(e.GetEvents<EventTypeB>().at(0).abc, "Hello");
+    e.ClearQueue();
+    EXPECT_TRUE(e.GetEvents<EventTypeA>().empty());
+    EXPECT_TRUE(e.GetEvents<EventTypeB>().empty());
 }
 
 TEST_F(EngineTest, Debugging) {
