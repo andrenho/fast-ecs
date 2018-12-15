@@ -333,6 +333,7 @@ TEST_F(EngineTest, Read) {
     EXPECT_TRUE(e.HasComponent<Position>(e1));
     EXPECT_TRUE(e.HasComponent<Direction>(e1));
     EXPECT_FALSE(e.HasComponent<Position>(e2));
+    EXPECT_EQ(e.GetComponentPtr<Position>(e2), nullptr);
     EXPECT_TRUE(e.HasComponent<Direction>(e2));
 
     int i=0;
