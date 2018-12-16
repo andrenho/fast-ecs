@@ -9,6 +9,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <new>
 #include <stdexcept>
 #include <tuple>
@@ -61,8 +62,29 @@ public:
     // 
     // ENTITIES
     //
+public:
     size_t AddEntity() {
         return _rd.AddEntity(); 
+    }
+
+    size_t AddEntity(std::string const& id) {
+        size_t n = AddEntity();
+        _entities[id] = n;
+        return n;
+    }
+
+    size_t GetEntity(std::string const& id) const {
+        auto it = _entities.find(id);
+        if (it == _entities.end())
+            throw ECSError("Entity id '" + id + "' not found.");
+        return it->second;
+    }
+
+    std::string const& GetEntityName(size_t id) const {
+        for (auto const& [k, v] : _entities)
+            if (v == id)
+                return k;
+        throw ECSError("Entity id " + std::to_string(id) + " not found.");
     }
 
     void RemoveEntity(size_t entity) {
@@ -71,22 +93,47 @@ public:
             _destructors[c->id](data);
             return false;
         });
+        // remove from entity list
+        for (auto it = std::begin(_entities); it != std::end(_entities); ) {
+            if (it->second == entity)
+                _entities.erase(it++);
+            else
+                ++it;
+        }
         // invalidate entity
         _rd.InvalidateEntity(entity);
     }
 
+    void RemoveEntity(std::string const& id) {
+        RemoveEntity(GetEntity(id));
+    }
+
+private:
+    std::map<std::string, size_t> _entities {};
+
     //
     // COMPONENTS
     //
-    template<typename C, typename... P> 
-    void AddComponent(size_t entity, P&& ...pars) {
+private:
+    template<typename C>
+    C* AllocateComponent(size_t entity) {
         if(HasComponent<C>(entity)) {
             throw ECSError("Component already exists in entity.");
         }
         component_id_t id = component_id<C>();
         // allocate space for the component, then initialize it
-        C* component = reinterpret_cast<C*>(_rd.AddEmptyComponent(entity, sizeof(C), id));
-        new(component) C(pars...);
+        return reinterpret_cast<C*>(_rd.AddEmptyComponent(entity, sizeof(C), id));
+    }
+
+public:
+    template<typename C, typename... P> 
+    void AddComponent(size_t entity, P&& ...pars) {
+        new(AllocateComponent<C>(entity)) C(pars...);
+    }
+
+    template<typename C, typename... P> 
+    void AddComponent(std::string const& entity, P&& ...pars) {
+        new(AllocateComponent<C>(GetEntity(entity))) C(pars...);
     }
 
     template<typename C>
@@ -99,8 +146,18 @@ public:
     }
 
     template<typename C>
+    C const& GetComponent(std::string const& entity) const {
+        return GetComponent(GetEntity(entity));
+    }
+
+    template<typename C>
     C& GetComponent(size_t entity) {
         return const_cast<C&>(static_cast<const Engine<System, Event, Components...>*>(this)->GetComponent<C>(entity));
+    }
+
+    template<typename C>
+    C& GetComponent(std::string const& entity) {
+        return GetComponent(GetEntity(entity));
     }
 
     template<typename C>
@@ -120,8 +177,18 @@ public:
     }
 
     template<typename C>
+    C const* GetComponentPtr(std::string const& entity) const {
+        return GetComponentPtr(GetEntity(entity));
+    }
+
+    template<typename C>
     C* GetComponentPtr(size_t entity) {
         return const_cast<C*>(static_cast<const Engine<System, Event, Components...>*>(this)->GetComponentPtr<C>(entity));
+    }
+
+    template<typename C>
+    C* GetComponentPtr(std::string const& entity) {
+        return GetComponentPtr(GetEntity(entity));
     }
 
     template<typename C>
@@ -139,10 +206,21 @@ public:
     }
 
     template<typename C>
+    bool HasComponent(std::string const& entity) const
+    {
+        return HasComponent<C>(GetEntity(entity));
+    }
+
+    template<typename C>
     void RemoveComponent(size_t entity) {
         _rd.InvalidateComponent(entity, component_id<C>(), [](void* data) { 
             reinterpret_cast<C*>(data)->~C();
         });
+    }
+
+    template<typename C>
+    void RemoveComponent(std::string const& entity) {
+        return RemoveComponent(GetEntity(entity));
     }
 
     // 
@@ -276,6 +354,10 @@ public:
         } else {
             examine_entity(entity, _rd.GetEntityPtr(entity));
         }
+    }
+
+    void Examine(std::ostream& os, std::string const& entity) const {
+        Examine(os, GetEntity(entity));
     }
  
 #ifndef GTEST

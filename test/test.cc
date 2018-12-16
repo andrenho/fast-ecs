@@ -447,6 +447,15 @@ TEST_F(EngineTest, Queue) {
     EXPECT_TRUE(e.GetEvents<EventTypeB>().empty());
 }
 
+TEST_F(EngineTest, Named) {
+    size_t e3 = e.AddEntity("test");
+    EXPECT_EQ(e.GetEntity("test"), e3);
+    EXPECT_ANY_THROW(e.GetEntity("abc"));
+    e.AddComponent<Position>("test", 40.f, 50.f);
+    EXPECT_TRUE(e.HasComponent<Position>("test"));
+    EXPECT_TRUE(e.HasComponent<Position>(e3));
+}
+
 TEST_F(EngineTest, Debugging) {
     e.Examine(cout);
 }

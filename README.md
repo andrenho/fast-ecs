@@ -122,7 +122,7 @@ Entity management:
 
 ```C++
 size_t AddEntity();                // create a new entity, and return that entity identifier number
-void   RemoveEntity(Entity ent);   // delete an entity
+void   RemoveEntity(size_t ent);   // delete an entity
 ```
 
 Component management:
@@ -176,6 +176,26 @@ e.ForEach<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
 e.ForEach<Position, Direction>([](size_t ent, Position const& pos, Direction const& dir) {
     // do something
 });
+```
+
+Tags:
+
+Entites can be tagged with a name in the creation. This can be used
+to reference one-of-a-kind entities. Notice that the referente still returns
+an integer. However, all functions below that take a `size_t` as entity can
+also take a `std::string`.
+
+```C++
+size_t AddEntity(std::string const& name);	 // notice we're passing a string here
+void   RemoveEntity(std::string const& name);
+
+C&   AddComponent<C>(std::string const& entity, ...);
+void RemoveComponent<C>(std::string const& entity);
+
+bool HasComponent<C>(std::string const& entity);
+C&   GetComponent<C>(std::string const& entity);
+
+// etc...
 ```
 
 Management:
