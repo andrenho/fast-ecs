@@ -147,7 +147,7 @@ public:
 
     template<typename C>
     C const& GetComponent(std::string const& entity) const {
-        return GetComponent(GetEntity(entity));
+        return GetComponent<C>(GetEntity(entity));
     }
 
     template<typename C>
@@ -157,7 +157,7 @@ public:
 
     template<typename C>
     C& GetComponent(std::string const& entity) {
-        return GetComponent(GetEntity(entity));
+        return GetComponent<C>(GetEntity(entity));
     }
 
     template<typename C>
@@ -178,7 +178,7 @@ public:
 
     template<typename C>
     C const* GetComponentPtr(std::string const& entity) const {
-        return GetComponentPtr(GetEntity(entity));
+        return GetComponentPtr<C>(GetEntity(entity));
     }
 
     template<typename C>
@@ -188,7 +188,7 @@ public:
 
     template<typename C>
     C* GetComponentPtr(std::string const& entity) {
-        return GetComponentPtr(GetEntity(entity));
+        return GetComponentPtr<C>(GetEntity(entity));
     }
 
     template<typename C>
