@@ -35,7 +35,7 @@ public:
 class PositionSystem : public System {
 public:
     void Execute(MyEngine& e) override {
-        e.ForEach<Position>([](size_t entity, Position& pos) {
+        e.for_each<Position>([](size_t entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
@@ -46,7 +46,7 @@ public:
 class DirectionSystem : public System {
 public:
     void Execute(MyEngine& e) override {
-        e.ForEach<Direction>([](size_t entity, Direction& dir) {
+        e.for_each<Direction>([](size_t entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
@@ -60,19 +60,19 @@ int main()
 {
     MyEngine e;
 
-    size_t e1 = e.AddEntity(),
-           e2 = e.AddEntity();
+    size_t e1 = e.add_entity(),
+           e2 = e.add_entity();
 
-    e.AddComponent<Position>(e1, 20.f, 30.f);
-    e.AddComponent<Direction>(e1, 1.2f);
+    e.add_component<Position>(e1, 20.f, 30.f);
+    e.add_component<Direction>(e1, 1.2f);
 
-    e.AddComponent<Position>(e2, 40.f, 50.f);
-    e.GetComponent<Position>(e2).x = 100.f;
+    e.add_component<Position>(e2, 40.f, 50.f);
+    e.component<Position>(e2).x = 100.f;
 
-    e.AddSystem<PositionSystem>();
-    e.AddSystem<DirectionSystem>();
+    e.add_system<PositionSystem>();
+    e.add_system<DirectionSystem>();
 
-    for(auto& sys: e.Systems()) {
+    for(auto& sys: e.systems()) {
         sys->Execute(e);
     }
 }

@@ -50,8 +50,8 @@ class Engine {
 public:
     ~Engine() {
         // call destructor for each component of each entity
-        _rd.ForEachEntity([&](size_t, uint8_t* entity_ptr) {
-            _rd.ForEachComponentInEntity(entity_ptr, [&](typename decltype(_rd)::Component* c, uint8_t* data, entity_size_t) {
+        _rd.for_each_entity([&](size_t, uint8_t* entity_ptr) {
+            _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component* c, uint8_t* data, entity_size_t) {
                 _destructors[c->id](data);
                 return false;
             });
@@ -65,33 +65,33 @@ public:
     // ENTITIES
     //
 public:
-    size_t AddEntity() {
-        return _rd.AddEntity(); 
+    size_t add_entity() {
+        return _rd.add_entity(); 
     }
 
-    size_t AddEntity(std::string const& id) {
-        size_t n = AddEntity();
+    size_t add_entity(std::string const& id) {
+        size_t n = add_entity();
         _entities[id] = n;
         return n;
     }
 
-    size_t GetEntity(std::string const& id) const {
+    size_t entity(std::string const& id) const {
         auto it = _entities.find(id);
         if (it == _entities.end())
             throw ECSError("Entity id '" + id + "' not found.");
         return it->second;
     }
 
-    std::string const& GetEntityName(size_t id) const {
+    std::string const& entity_name(size_t id) const {
         for (auto const& [k, v] : _entities)
             if (v == id)
                 return k;
         throw ECSError("Entity id " + std::to_string(id) + " not found.");
     }
 
-    void RemoveEntity(size_t entity) {
+    void remove_entity(size_t entity) {
         // call destructor for each component
-        _rd.ForEachComponentInEntity(_rd.GetEntityPtr(entity), [&](typename decltype(_rd)::Component* c, uint8_t* data, entity_size_t) {
+        _rd.for_each_component_in_entity(_rd.entity_ptr(entity), [&](typename decltype(_rd)::Component* c, uint8_t* data, entity_size_t) {
             _destructors[c->id](data);
             return false;
         });
@@ -103,11 +103,11 @@ public:
                 ++it;
         }
         // invalidate entity
-        _rd.InvalidateEntity(entity);
+        _rd.invalidate_entity(entity);
     }
 
-    void RemoveEntity(std::string const& id) {
-        RemoveEntity(GetEntity(id));
+    void remove_entity(std::string const& id) {
+        remove_entity(entity(id));
     }
 
 private:
@@ -118,29 +118,29 @@ private:
     //
 private:
     template<typename C>
-    C* AllocateComponent(size_t entity) {
-        if(HasComponent<C>(entity)) {
+    C* allocate_component(size_t ent) {
+        if(has_component<C>(ent)) {
             throw ECSError("Component already exists in entity.");
         }
         component_id_t id = component_id<C>();
         // allocate space for the component, then initialize it
-        return reinterpret_cast<C*>(_rd.AddEmptyComponent(entity, sizeof(C), id));
+        return reinterpret_cast<C*>(_rd.add_empty_component(ent, sizeof(C), id));
     }
 
 public:
     template<typename C, typename... P> 
-    void AddComponent(size_t entity, P&& ...pars) {
-        new(AllocateComponent<C>(entity)) C(pars...);
+    void add_component(size_t ent, P&& ...pars) {
+        new(allocate_component<C>(ent)) C(pars...);
     }
 
     template<typename C, typename... P> 
-    void AddComponent(std::string const& entity, P&& ...pars) {
-        new(AllocateComponent<C>(GetEntity(entity))) C(pars...);
+    void add_component(std::string const& ent, P&& ...pars) {
+        new(allocate_component<C>(entity(ent))) C(pars...);
     }
 
     template<typename C>
-    C const& GetComponent(size_t entity) const {
-        C const* component = GetComponentPtr<C>(entity);
+    C const& component(size_t ent) const {
+        C const* component = component_ptr<C>(ent);
         if(component == nullptr) {
             throw ECSError("Entity does not contain this component.");
         }
@@ -148,24 +148,24 @@ public:
     }
 
     template<typename C>
-    C const& GetComponent(std::string const& entity) const {
-        return GetComponent<C>(GetEntity(entity));
+    C const& component(std::string const& ent) const {
+        return component<C>(entity(ent));
     }
 
     template<typename C>
-    C& GetComponent(size_t entity) {
-        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->GetComponent<C>(entity));
+    C& component(size_t ent) {
+        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component<C>(ent));
     }
 
     template<typename C>
-    C& GetComponent(std::string const& entity) {
-        return GetComponent<C>(GetEntity(entity));
+    C& component(std::string const& ent) {
+        return component<C>(entity(ent));
     }
 
     template<typename C>
-    C const* GetComponentPtr(size_t entity) const {
+    C const* component_ptr(size_t ent) const {
         void const* cdata = nullptr;
-        _rd.ForEachComponentInEntity(_rd.GetEntityPtr(entity), [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
+        _rd.for_each_component_in_entity(_rd.entity_ptr(ent), [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
             if(c->id == component_id<C>()) {
                 cdata = data;
                 return true;
@@ -179,25 +179,25 @@ public:
     }
 
     template<typename C>
-    C const* GetComponentPtr(std::string const& entity) const {
-        return GetComponentPtr<C>(GetEntity(entity));
+    C const* component_ptr(std::string const& ent) const {
+        return component_ptr<C>(entity(ent));
     }
 
     template<typename C>
-    C* GetComponentPtr(size_t entity) {
-        return const_cast<C*>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->GetComponentPtr<C>(entity));
+    C* component_ptr(size_t ent) {
+        return const_cast<C*>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component_ptr<C>(ent));
     }
 
     template<typename C>
-    C* GetComponentPtr(std::string const& entity) {
-        return GetComponentPtr<C>(GetEntity(entity));
+    C* component_ptr(std::string const& ent) {
+        return component_ptr<C>(entity(ent));
     }
 
     template<typename C>
-    bool HasComponent(size_t entity) const
+    bool has_component(size_t ent) const
     {
         bool has = false;
-        _rd.ForEachComponentInEntity(_rd.GetEntityPtr(entity), [&](typename decltype(_rd)::Component const* c, uint8_t const*, entity_size_t) {
+        _rd.for_each_component_in_entity(_rd.entity_ptr(ent), [&](typename decltype(_rd)::Component const* c, uint8_t const*, entity_size_t) {
             if(c->id == component_id<C>()) {
                 has = true;
                 return true;
@@ -208,47 +208,47 @@ public:
     }
 
     template<typename C>
-    bool HasComponent(std::string const& entity) const
+    bool has_component(std::string const& ent) const
     {
-        return HasComponent<C>(GetEntity(entity));
+        return has_component<C>(entity(ent));
     }
 
     template<typename C>
-    void RemoveComponent(size_t entity) {
-        _rd.InvalidateComponent(entity, component_id<C>(), [](void* data) { 
+    void remove_component(size_t ent) {
+        _rd.invalidate_component(ent, component_id<C>(), [](void* data) { 
             reinterpret_cast<C*>(data)->~C();
         });
     }
 
     template<typename C>
-    void RemoveComponent(std::string const& entity) {
-        return RemoveComponent(GetEntity(entity));
+    void remove_component(std::string const& ent) {
+        return remove_component(entity(ent));
     }
 
     // 
     // MANAGEMENT
     //
-    void Compress() { 
-        _rd.Compress(); 
+    void compress() { 
+        _rd.compress(); 
     }
 
     //
     // ITERATION
     //
     template<typename... C, typename F>
-    void ForEach(F const& user_function) const {
+    void for_each(F const& user_function) const {
 
-        _rd.ForEachEntity([&](size_t entity, uint8_t const* entity_ptr) {
+        _rd.for_each_entity([&](size_t entity, uint8_t const* entity_ptr) {
 
             // Here, we prepare for a longjmp. If the component C is not found
-            // when ForEachParameter is called, it calls longjmp, which skips
+            // when for_each_parameter is called, it calls longjmp, which skips
             // calling the user function.
             jmp_buf env_buffer;
             int val = setjmp(env_buffer);
 
             // Call the user function. `val` is 0 when the component is found.
             if(val == 0) {
-                user_function(entity, ForEachParameter<C>(entity_ptr, env_buffer)...);
+                user_function(entity, for_each_parameter<C>(entity_ptr, env_buffer)...);
             }
 
             return false;
@@ -256,19 +256,19 @@ public:
     }
 
     template<typename... C, typename F>
-    void ForEach(F const& user_function) {
+    void for_each(F const& user_function) {
 
-        _rd.ForEachEntity([&](size_t entity, uint8_t* entity_ptr) {
+        _rd.for_each_entity([&](size_t entity, uint8_t* entity_ptr) {
 
             // Here, we prepare for a longjmp. If the component C is not found
-            // when ForEachParameter is called, it calls longjmp, which skips
+            // when for_each_parameter is called, it calls longjmp, which skips
             // calling the user function.
             jmp_buf env_buffer;
             int val = setjmp(env_buffer);
 
             // Call the user function. `val` is 0 when the component is found.
             if(val == 0) {
-                user_function(entity, ForEachParameter<C>(entity_ptr, env_buffer)...);
+                user_function(entity, for_each_parameter<C>(entity_ptr, env_buffer)...);
             }
 
             return false;
@@ -276,9 +276,9 @@ public:
     }
 
 private:
-    template<typename C> C const& ForEachParameter(uint8_t const* entity_ptr, jmp_buf env_buffer) const {
+    template<typename C> C const& for_each_parameter(uint8_t const* entity_ptr, jmp_buf env_buffer) const {
         void const* cdata = nullptr;
-        _rd.ForEachComponentInEntity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
+        _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
             if(c->id == component_id<C>()) {
                 cdata = data;
                 return true;
@@ -291,20 +291,20 @@ private:
         return *reinterpret_cast<C const*>(cdata);
     }
 
-    template<typename C> C& ForEachParameter(uint8_t const* entity_ptr, jmp_buf env_buffer) {
-        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->ForEachParameter<C>(entity_ptr, env_buffer));
+    template<typename C> C& for_each_parameter(uint8_t const* entity_ptr, jmp_buf env_buffer) {
+        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->for_each_parameter<C>(entity_ptr, env_buffer));
     }
 public:
 
     //
     // SYSTEMS
     //
-    template<typename S, typename... P> S& AddSystem(P&& ...pars) {
+    template<typename S, typename... P> S& add_system(P&& ...pars) {
         _systems.push_back(new S(pars...));
         return *static_cast<S*>(_systems.back());
     }
 
-    template<typename S> S& GetSystem() {
+    template<typename S> S& system() {
         for(auto& sys: _systems) {
             S* s = dynamic_cast<S*>(sys);
             if(s) {
@@ -314,16 +314,16 @@ public:
         throw std::runtime_error("System not found.");
     }
 
-    std::vector<System*> const& Systems() const { return _systems; }
+    std::vector<System*> const& systems() const { return _systems; }
 
     //
     // QUEUE
     //
 public:
-    void Send(Event ev) { _events.push_back(std::move(ev)); }
+    void send(Event ev) { _events.push_back(std::move(ev)); }
 
     template <typename T>
-    std::vector<T> GetEvents() const {
+    std::vector<T> events() const {
         std::vector<T> r;
         for (auto ev : _events)
             if (std::holds_alternative<T>(ev))
@@ -331,7 +331,7 @@ public:
         return r;
     }
 
-    void ClearQueue() { _events.clear(); }
+    void clear_queue() { _events.clear(); }
 
 private:
     std::vector<Event> _events {};
@@ -344,16 +344,16 @@ public:
     Global const& global() const { return _global; }
 
 private:
-    Global _global;
+    Global _global {};
 
     //
     // DEBUGGING
     //
 public:
-    void Examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
+    void examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
         auto examine_entity = [&](size_t entity, uint8_t const* entity_ptr) {
             os << "Entity #" << entity << "\n";
-            _rd.ForEachComponentInEntity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
+            _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
                 os << "  - ";
                 _debuggers[c->id](os, data);
                 os << "\n";
@@ -362,14 +362,14 @@ public:
             return false;
         };
         if(entity == std::numeric_limits<size_t>::max()) {
-            _rd.ForEachEntity(examine_entity);
+            _rd.for_each_entity(examine_entity);
         } else {
-            examine_entity(entity, _rd.GetEntityPtr(entity));
+            examine_entity(entity, _rd.entity_ptr(entity));
         }
     }
 
-    void Examine(std::ostream& os, std::string const& entity) const {
-        Examine(os, GetEntity(entity));
+    void examine(std::ostream& os, std::string const& ent) const {
+        examine(os, entity(ent));
     }
  
 #ifndef GTEST
@@ -398,7 +398,7 @@ private:
         static constexpr size_t         INVALIDATED_ENTITY    = std::numeric_limits<size_t>::max();
         static constexpr component_id_t INVALIDATED_COMPONENT = std::numeric_limits<component_id_t>::max();
 
-        size_t AddEntity() {
+        size_t add_entity() {
             // insert index in _entities
             _entities.push_back(_ary.size());
             // insert size in _ary
@@ -407,15 +407,15 @@ private:
             return _entities.size()-1;
         }
 
-        bool IsEntityValid(size_t entity) const {
-            return GetEntitySize(entity) >= 0;
+        bool is_entity_valid(size_t entity) const {
+            return entity_size(entity) >= 0;
         }
 
-        entity_size_t GetEntitySize(size_t entity) const {
+        entity_size_t entity_size(size_t entity) const {
             return *reinterpret_cast<entity_size_t const*>(&_ary[_entities[entity]]);
         }
 
-        uint8_t const* GetEntityPtr(size_t entity) const {
+        uint8_t const* entity_ptr(size_t entity) const {
             if(entity > _entities.size()) {
                 throw ECSError("Entity does not exist.");
             }
@@ -426,11 +426,11 @@ private:
             return &_ary[idx];
         }
 
-        uint8_t* GetEntityPtr(size_t entity) {
-            return const_cast<uint8_t*>(static_cast<const Engine<System, Global, Event, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->GetEntityPtr(entity));
+        uint8_t* entity_ptr(size_t entity) {
+            return const_cast<uint8_t*>(static_cast<const Engine<System, Global, Event, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->entity_ptr(entity));
         }
 
-        void InvalidateEntity(size_t entity) {
+        void invalidate_entity(size_t entity) {
             // IMPORTANT: this doesn't call the destructor for the entities
             entity_size_t* entity_sz = reinterpret_cast<entity_size_t*>(&_ary[_entities[entity]]);
             memset(&_ary[_entities[entity] + sizeof(entity_size_t)], 0xFF, *entity_sz - sizeof(entity_size_t));
@@ -438,7 +438,7 @@ private:
             _entities[entity] = INVALIDATED_ENTITY;
         }
 
-        void* AddEmptyComponent(size_t entity, component_size_t sz, component_id_t id) {
+        void* add_empty_component(size_t entity, component_size_t sz, component_id_t id) {
             // create component
             Component component { sz, id };
             size_t idx = _find_space_for_component(entity, sizeof(Component) + sz);
@@ -446,12 +446,12 @@ private:
             return &_ary[idx + sizeof(Component)];
         }
 
-        void AddComponent(size_t entity, component_size_t sz, component_id_t id, void* data) {
-            memcpy(AddEmptyComponent(entity, sz, id), data, sz);
+        void add_component(size_t entity, component_size_t sz, component_id_t id, void* data) {
+            memcpy(add_empty_component(entity, sz, id), data, sz);
         }
 
         template<typename F>
-        void ForEachEntity(F const& f, bool skip_invalid = true) {
+        void for_each_entity(F const& f, bool skip_invalid = true) {
             if(_ary.empty()) {
                 return;
             }
@@ -474,7 +474,7 @@ private:
         }
 
         template<typename F>
-        void ForEachEntity(F const& f, bool skip_invalid = true) const {
+        void for_each_entity(F const& f, bool skip_invalid = true) const {
             if(_ary.empty()) {
                 return;
             }
@@ -498,7 +498,7 @@ private:
 
         // TODO - const version
         template<typename F>
-        void ForEachComponentInEntity(uint8_t* entity_ptr, F const& f, bool skip_invalid = true) {
+        void for_each_component_in_entity(uint8_t* entity_ptr, F const& f, bool skip_invalid = true) {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
             if(entity_sz < 0) {
                 throw ECSError("Using a removed entity");
@@ -518,7 +518,7 @@ private:
         }
 
         template<typename F>
-        void ForEachComponentInEntity(uint8_t const* entity_ptr, F const& f, bool skip_invalid = true) const {
+        void for_each_component_in_entity(uint8_t const* entity_ptr, F const& f, bool skip_invalid = true) const {
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t const*>(entity_ptr);
             if(entity_sz < 0) {
                 throw ECSError("Using a removed entity");
@@ -538,7 +538,7 @@ private:
         }
 
         template<typename F>
-        void InvalidateComponent(size_t entity, component_id_t id, F const& destructor) {
+        void invalidate_component(size_t entity, component_id_t id, F const& destructor) {
             uint8_t* entity_ptr = &_ary[_entities[entity]];
 
             entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
@@ -547,7 +547,7 @@ private:
             }
 
             bool found = false;
-            ForEachComponentInEntity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
+            for_each_component_in_entity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
                 if(id == component->id) {
                     destructor(data);
                     component->id = INVALIDATED_COMPONENT;
@@ -562,11 +562,11 @@ private:
             }
         }
 
-        void Compress() {
+        void compress() {
             std::vector<uint8_t> newary = {};
             newary.reserve(_ary.size());   // avoids multiple resizing - we shrink it later
 
-            ForEachEntity([&](size_t entity, uint8_t* entity_ptr) {
+            for_each_entity([&](size_t entity, uint8_t* entity_ptr) {
                 entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
                 size_t current_newary = newary.size();
                 // if entity is not invalidated, add it to the new ary
@@ -574,7 +574,7 @@ private:
                     entity_size_t current_sz = sizeof(entity_size_t);
                     newary.insert(end(newary), sizeof(entity_size_t), 0);  // placeholder
                     // if component is not invalidated, add it to the new ary
-                    ForEachComponentInEntity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
+                    for_each_component_in_entity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
                         if(component->id != INVALIDATED_COMPONENT) {
                             size_t sz = newary.size();
                             newary.insert(end(newary), sizeof(Component) + component->sz, 0);
@@ -599,11 +599,11 @@ private:
 
     private:
 #ifdef GTEST
-        FRIEND_TEST(RawTest, AddEntity);
-        FRIEND_TEST(RawTest, AddComponents);
-        FRIEND_TEST(RawTest, InvalidateComponents);
+        FRIEND_TEST(RawTest, add_entity);
+        FRIEND_TEST(RawTest, add_components);
+        FRIEND_TEST(RawTest, invalidate_components);
         FRIEND_TEST(RawTest, InvalidateEntities);
-        FRIEND_TEST(RawTest, Compress);
+        FRIEND_TEST(RawTest, compress);
         FRIEND_TEST(RawTest, DifferentSizes);
         FRIEND_TEST(RawTest, InvalidSizes);
         FRIEND_TEST(RawTest, IterateConst);
@@ -640,7 +640,7 @@ private:
             // check if we can reuse any inactive components
             uint8_t* entity_ptr = &_ary[idx];
             entity_size_t pos = -1;
-            ForEachComponentInEntity(entity_ptr, [&](Component* component, void*, entity_size_t offset) -> bool {
+            for_each_component_in_entity(entity_ptr, [&](Component* component, void*, entity_size_t offset) -> bool {
                 if(component->id == INVALIDATED_COMPONENT && component->sz <= entity_sz) {
                     pos = offset;
                     return true;
@@ -670,24 +670,24 @@ private:
     // }}}
 /*
 class RawData<entity_size_t, component_id_t, component_size_t> {
-    void          AddEntity();
-    bool          IsEntityValid(size_t entity) const;
-    entity_size_t GetEntitySize(size_t entity) const;
-    uint8_t*      GetEntityPtr(size_t) const;
-    void          InvalidateEntity(size_t entity);
+    void          add_entity();
+    bool          is_entity_valid(size_t entity) const;
+    entity_size_t entity_size(size_t entity) const;
+    uint8_t*      entity_ptr(size_t) const;
+    void          invalidate_entity(size_t entity);
   
-    void          AddComponent(size_t entity, component_size_t sz,
+    void          add_component(size_t entity, component_size_t sz,
                                component_id_t id, void* data);
-    void          InvalidateComponent(size_t entity, component_id_t id,
+    void          invalidate_component(size_t entity, component_id_t id,
                                       function<void(void* data)> destructor);
   
     // return true to stop searching
-    void          ForEachEntity(function<bool(size_t entity, uint8_t* entity_ptr)> f, 
+    void          for_each_entity(function<bool(size_t entity, uint8_t* entity_ptr)> f, 
                                 bool skip_invalid = true);
-    void          ForEachComponentInEntity(uint8_t* entity_ptr, 
+    void          for_each_component_in_entity(uint8_t* entity_ptr, 
                       function<bool(Component* c, uint8_t* data, entity_size_t pos)> f);
   
-    void          Compress();
+    void          compress();
 }
 */
 
@@ -756,7 +756,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
 
     // execute operator<< of struct (with and without)
     template<typename C, typename std::enable_if<has_ostream_method<C>::value>::type* = nullptr>
-    std::function<void(std::ostream&, void const*)> CreateDebugger() {
+    std::function<void(std::ostream&, void const*)> create_debugger() {
         return [](std::ostream& os, void const* data) {
             C const* c = reinterpret_cast<C const*>(data);
             os << *c;
@@ -764,7 +764,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
     }
 
     template<typename C, typename std::enable_if<!has_ostream_method<C>::value>::type* = nullptr>
-    std::function<void(std::ostream&, void const*)> CreateDebugger() {
+    std::function<void(std::ostream&, void const*)> create_debugger() {
         return [](std::ostream& os, void const*) {
             int status;
             std::string tname = typeid(C).name();
@@ -782,15 +782,15 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
     // }}}
 
     template<typename C>
-    std::function<void(void*)> CreateDestructor() {
+    std::function<void(void*)> create_destructor() {
         return [](void* data) {
             reinterpret_cast<C*>(data)->~C();
         };
     }
 
     RawData<entity_size_t, component_id_t, component_size_t> _rd = {};
-    std::vector<std::function<void(void*)>> _destructors = { CreateDestructor<Components>()... };
-    std::vector<std::function<void(std::ostream&, void const*)>> _debuggers = { CreateDebugger<Components>()... };
+    std::vector<std::function<void(void*)>> _destructors = { create_destructor<Components>()... };
+    std::vector<std::function<void(std::ostream&, void const*)>> _debuggers = { create_debugger<Components>()... };
     std::vector<size_t> _sizes = { sizeof(Components)... };
     std::vector<System*> _systems = {};
 };

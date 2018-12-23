@@ -42,14 +42,14 @@ using MyEngine = ECS::Engine<class System, ECS::NoGlobal, ECS::NoQueue, Position
 
 class System { 
 public:
-    virtual void Execute(MyEngine& e) = 0;
+    virtual void execute(MyEngine& e) = 0;
     virtual ~System() {}
 };
 
 class PositionSystem : public System {
 public:
-    void Execute(MyEngine& e) override {
-        e.ForEach<Position>([](size_t entity, Position& pos) {
+    void execute(MyEngine& e) override {
+        e.for_each<Position>([](size_t entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
@@ -59,8 +59,8 @@ public:
 
 class DirectionSystem : public System {
 public:
-    void Execute(MyEngine& e) override {
-        e.ForEach<Direction>([](size_t entity, Direction& dir) {
+    void execute(MyEngine& e) override {
+        e.for_each<Direction>([](size_t entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
@@ -74,20 +74,20 @@ int main()
 {
     MyEngine e;
 
-    size_t e1 = e.AddEntity(),
-           e2 = e.AddEntity();
+    size_t e1 = e.add_entity(),
+           e2 = e.add_entity();
 
-    e.AddComponent<Position>(e1, 20.f, 30.f);
-    e.AddComponent<Direction>(e1, 1.2f);
+    e.add_component<Position>(e1, 20.f, 30.f);
+    e.add_component<Direction>(e1, 1.2f);
 
-    e.AddComponent<Position>(e2, 40.f, 50.f);
-    e.GetComponent<Position>(e2).x = 100.f;
+    e.add_component<Position>(e2, 40.f, 50.f);
+    e.component<Position>(e2).x = 100.f;
 
-    e.AddSystem<PositionSystem>();
-    e.AddSystem<DirectionSystem>();
+    e.add_system<PositionSystem>();
+    e.add_system<DirectionSystem>();
 
-    for(auto& sys: e.Systems()) {
-        sys->Execute(e);
+    for(auto& sys: e.systems()) {
+        sys->execute(e);
     }
 }
 ```
@@ -121,8 +121,8 @@ using MyEngine = ECS::Engine<System, EventType, Position, Direction>;
 Entity management:
 
 ```C++
-size_t AddEntity();                // create a new entity, and return that entity identifier number
-void   RemoveEntity(size_t ent);   // delete an entity
+size_t add_entity();                // create a new entity, and return that entity identifier number
+void   remove_entity(size_t ent);   // delete an entity
 ```
 
 Component management:
@@ -148,32 +148,32 @@ Avoid using pointers in components, as it defeats the porpouse of the high speed
 Also, remember that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their number.
 
 ```C++
-C&   AddComponent<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
-void RemoveComponent<C>(size_t entity);     // remove component from entity
+C&   add_component<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
+void remove_component<C>(size_t entity);     // remove component from entity
 
-bool HasComponent<C>(size_t entity);        // return true if entity contains a component
-C&   GetComponent<C>(size_t entity);        // return a reference to a component
+bool has_component<C>(size_t entity);        // return true if entity contains a component
+C&   component<C>(size_t entity);        // return a reference to a component
 
 // When getting a component, it can be edited directly:
-e.GetComponent<Position>(my_entity).x = 10;
+e.component<Position>(my_entity).x = 10;
 
-// `GetComponentPtr` will return a pointer for the component, or nullptr if it doesn't exist.
-// Thus, it can be used as a faster combination of `HasComponent` and `GetComponent`
-C*   GetComponentPtr<C>(size_t entity);
+// `component_ptr` will return a pointer for the component, or nullptr if it doesn't exist.
+// Thus, it can be used as a faster combination of `has_component` and `component`
+C*   component_ptr<C>(size_t entity);
 ```
 
 Iterating over entities: 
 
 ```C++
-void ForEach<C...>([](size_t entity, ...);
+void for_each<C...>([](size_t entity, ...);
 
 // Example:
-e.ForEach<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
+e.for_each<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
     // do something
 });
 
 // There's also a const version of ForEach: 
-e.ForEach<Position, Direction>([](size_t ent, Position const& pos, Direction const& dir) {
+e.for_each<Position, Direction>([](size_t ent, Position const& pos, Direction const& dir) {
     // do something
 });
 ```
@@ -186,14 +186,16 @@ an integer. However, all functions below that take a `size_t` as entity can
 also take a `std::string`.
 
 ```C++
-size_t AddEntity(std::string const& name);	 // notice we're passing a string here
-void   RemoveEntity(std::string const& name);
+size_t      add_entity(std::string const& name);	 // notice we're passing a string here
+size_t      entity(std::string const& name);             // get the id of a tagged entity
+std::string entity_name(size_t id);                      // return the name of a tagged entity
+void        remove_entity(std::string const& name);
 
-C&   AddComponent<C>(std::string const& entity, ...);
-void RemoveComponent<C>(std::string const& entity);
+C&          add_component<C>(std::string const& entity, ...);
+void        remove_component<C>(std::string const& entity);
 
-bool HasComponent<C>(std::string const& entity);
-C&   GetComponent<C>(std::string const& entity);
+bool        has_component<C>(std::string const& entity);
+C&          component<C>(std::string const& entity);
 
 // etc...
 ```
@@ -203,15 +205,15 @@ Management:
 After deleting and readding many entities and components, the component array will become fragmented. So, eventually, is a good idea to compress the array, removing the spaces that were left:
 
 ```C++
-void Compress();
+void compress();
 ```
 
-Systems:
+systems:
 
 ```C++
 // all systems must inherit from a single class
 struct System {
-    virtual void Execute(MyEngine& e) = 0;
+    virtual void execute(MyEngine& e) = 0;
     virtual ~System() {}
 }
 
@@ -221,12 +223,12 @@ struct MySystem : public System {
     }
 };
 
-System&         AddSystem<S>(...);    // add a new system (call constructor)
-System&         GetSystem<S>();       // return a reference to a system
-vector<System*> Systems();            // return a vector of systems to iterate, example:
+System&         add_system<S>(...);    // add a new system (call constructor)
+System&         system<S>();       // return a reference to a system
+vector<System*> systems();            // return a vector of systems to iterate, example:
 
-for(auto& sys: e.Systems()) {
-    sys->Execute(e);
+for(auto& sys: e.systems()) {
+    sys->execute(e);
 }
 
 // You can only add one system of each type (class).
@@ -272,18 +274,18 @@ using MyEngine = ECS::Engine<System, EventType, MyComponents...>;
 MyEngine e;
 
 // Send an event to all systems.
-e.Send(EventDialog { "Hello!" });
+e.send(EventDialog { "Hello!" });
 
-// In the system, `GetEvents` can be used to read each of the messages in the event queue.
+// In the system, `events` can be used to read each of the messages in the event queue.
 // This will not clear the events from the queue, as other system might want to read it as well.
-for (EventDialog const& ev: e.GetEvents<EventDialog>()) {
+for (EventDialog const& ev: e.events<EventDialog>()) {
     // do something with `dialog_ev`...
 }
 
 // At the end of each loop, the queue must be cleared.
-for(auto& sys: e.Systems())
-    sys->Execute(e);
-e.ClearQueue();
+for(auto& sys: e.systems())
+    sys->execute(e);
+e.clear_queue();
 ```
 
 # Component printing
@@ -302,10 +304,10 @@ ostream& operator<<(ostream& out, Direction const& dir) {
 }
 
 // Then, to print all components of an entity:
-e.Examine(cout, my_entity);
+e.examine(cout, my_entity);
 
 // If you want to print all components of all entities:
-e.Examine(cout);
+e.examine(cout);
 
 // The result is:
 Entity #0:
