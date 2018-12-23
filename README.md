@@ -152,7 +152,7 @@ C&   add_component<C>(size_t entity, ...);   // add a new component to an entity
 void remove_component<C>(size_t entity);     // remove component from entity
 
 bool has_component<C>(size_t entity);        // return true if entity contains a component
-C&   component<C>(size_t entity);        // return a reference to a component
+C&   component<C>(size_t entity);            // return a reference to a component
 
 // When getting a component, it can be edited directly:
 e.component<Position>(my_entity).x = 10;
@@ -208,7 +208,7 @@ After deleting and readding many entities and components, the component array wi
 void compress();
 ```
 
-systems:
+Systems:
 
 ```C++
 // all systems must inherit from a single class
@@ -218,14 +218,14 @@ struct System {
 }
 
 struct MySystem : public System {
-    void Execute(MyEngine& e) override {
+    void execute(MyEngine& e) override {
         // do something
     }
 };
 
 System&         add_system<S>(...);    // add a new system (call constructor)
-System&         system<S>();       // return a reference to a system
-vector<System*> systems();            // return a vector of systems to iterate, example:
+System&         system<S>();           // return a reference to a system
+vector<System*> systems();             // return a vector of systems to iterate, example:
 
 for(auto& sys: e.systems()) {
     sys->execute(e);
@@ -279,7 +279,7 @@ e.send(EventDialog { "Hello!" });
 // In the system, `events` can be used to read each of the messages in the event queue.
 // This will not clear the events from the queue, as other system might want to read it as well.
 for (EventDialog const& ev: e.events<EventDialog>()) {
-    // do something with `dialog_ev`...
+    // do something with `ev`...
 }
 
 // At the end of each loop, the queue must be cleared.
