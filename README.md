@@ -34,7 +34,7 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ECS::Engine<class System, ECS::NoQueue, Position, Direction>;
+using MyEngine = ECS::Engine<class System, ECS::NoGlobal, ECS::NoQueue, Position, Direction>;
 
 //
 // SYSTEMS
@@ -230,6 +230,28 @@ for(auto& sys: e.Systems()) {
 }
 
 // You can only add one system of each type (class).
+```
+
+Globals:
+
+Globals can be used for an unique piece of information that is shared between
+all system. The global type is set on the engine initialization, and it can
+be replaced by `ECS::NoGlobal` if it is not used.
+
+If used, the type need to be default constructible, and it is initialized along
+with the engine.
+
+```C++
+struct GlobalData {
+    int x = 42;
+};
+
+using MyEngine = ECS::Engine<class System, GlobalData, ECS::NoQueue, MyComponent>;
+MyEngine e;
+
+std::cout << e.global().x << "\n";    // result: 42
+e.global().x = 8;
+std::cout << e.global().x << "\n";    // result: 8
 ```
 
 Event queues:
