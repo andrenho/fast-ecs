@@ -39,9 +39,11 @@ public:
 
 using NoQueue = std::variant<int>;
 using NoSystem = void;
+struct NoGlobal {};
 
 template<
     typename System,
+    typename Global,
     typename Event,
     typename... Components>
 class Engine {
@@ -152,7 +154,7 @@ public:
 
     template<typename C>
     C& GetComponent(size_t entity) {
-        return const_cast<C&>(static_cast<const Engine<System, Event, Components...>*>(this)->GetComponent<C>(entity));
+        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->GetComponent<C>(entity));
     }
 
     template<typename C>
@@ -183,7 +185,7 @@ public:
 
     template<typename C>
     C* GetComponentPtr(size_t entity) {
-        return const_cast<C*>(static_cast<const Engine<System, Event, Components...>*>(this)->GetComponentPtr<C>(entity));
+        return const_cast<C*>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->GetComponentPtr<C>(entity));
     }
 
     template<typename C>
@@ -290,7 +292,7 @@ private:
     }
 
     template<typename C> C& ForEachParameter(uint8_t const* entity_ptr, jmp_buf env_buffer) {
-        return const_cast<C&>(static_cast<const Engine<System, Event, Components...>*>(this)->ForEachParameter<C>(entity_ptr, env_buffer));
+        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->ForEachParameter<C>(entity_ptr, env_buffer));
     }
 public:
 
@@ -333,6 +335,16 @@ public:
 
 private:
     std::vector<Event> _events {};
+
+    //
+    // GLOBALS
+    //
+public:
+    Global&       global() { return _global; }
+    Global const& global() const { return _global; }
+
+private:
+    Global _global;
 
     //
     // DEBUGGING
@@ -415,7 +427,7 @@ private:
         }
 
         uint8_t* GetEntityPtr(size_t entity) {
-            return const_cast<uint8_t*>(static_cast<const Engine<System, Event, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->GetEntityPtr(entity));
+            return const_cast<uint8_t*>(static_cast<const Engine<System, Global, Event, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->GetEntityPtr(entity));
         }
 
         void InvalidateEntity(size_t entity) {

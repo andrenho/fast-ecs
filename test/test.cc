@@ -15,7 +15,7 @@ bool destroyed = false;
 
 class RawTest : public ::testing::Test {
 protected:
-    using RawData = ECS::Engine<int,ECS::NoQueue,int>::RawData<int32_t, uint16_t, uint16_t>;
+    using RawData = ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,int>::RawData<int32_t, uint16_t, uint16_t>;
     RawData rd = {};
 
 public:
@@ -193,7 +193,7 @@ TEST_F(RawTest, Compress) {
 
 
 TEST_F(RawTest, DifferentSizes) {
-    ECS::Engine<int,ECS::NoQueue,int>::RawData<int8_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,int>::RawData<int8_t, uint8_t, uint8_t> rd2;
 
     e1 = rd2.AddEntity();
     e2 = rd2.AddEntity();
@@ -215,7 +215,7 @@ TEST_F(RawTest, DifferentSizes) {
 
 
 TEST_F(RawTest, InvalidSizes) {
-    ECS::Engine<int,ECS::NoQueue,int>::RawData<int16_t, uint8_t, uint8_t> rd2;
+    ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,int>::RawData<int16_t, uint8_t, uint8_t> rd2;
     e1 = rd2.AddEntity();
 
     /*
@@ -235,7 +235,7 @@ TEST_F(RawTest, InvalidSizes) {
     */
 
     // entity too large
-    ECS::Engine<int,ECS::NoQueue,int>::RawData<int8_t, uint8_t, uint8_t> rd3;
+    ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,int>::RawData<int8_t, uint8_t, uint8_t> rd3;
     e1 = rd3.AddEntity();
     struct Medium {
         uint8_t medium[100];
@@ -266,7 +266,7 @@ TEST_F(RawTest, IterateConst) {
     });
 
     // const
-    ECS::Engine<int,ECS::NoQueue,int>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
+    ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,int>::RawData<int32_t, uint16_t, uint16_t> const& rdc = rd;
     rdc.ForEachEntity([](size_t entity, uint8_t const*) { EXPECT_EQ(entity, 0); return true; });
     rdc.ForEachComponentInEntity(rdc.GetEntityPtr(e1), [](decltype(rd)::Component const* c, void const* data, int32_t) {
         EXPECT_EQ(c->id, 7);
@@ -301,6 +301,10 @@ protected:
     }
 
 public:
+    struct Global {
+        int x = 42;
+    };
+
     struct Position {
         float x, y;
         Position(float x, float y) : x(x), y(y) {}
@@ -317,7 +321,7 @@ public:
         ~Destructable() { --destroy_count; }
     };
 
-    using MyEngine = ECS::Engine<System, Event, Position, Direction, Destructable>;
+    using MyEngine = ECS::Engine<System, Global, Event, Position, Direction, Destructable>;
     MyEngine e = {};
 
     size_t e1, e2;
@@ -454,6 +458,12 @@ TEST_F(EngineTest, Named) {
     e.AddComponent<Position>("test", 40.f, 50.f);
     EXPECT_TRUE(e.HasComponent<Position>("test"));
     EXPECT_TRUE(e.HasComponent<Position>(e3));
+}
+
+TEST_F(EngineTest, Global) {
+    EXPECT_EQ(e.global().x, 42);
+    e.global().x = 24;
+    EXPECT_EQ(e.global().x, 24);
 }
 
 TEST_F(EngineTest, Debugging) {
