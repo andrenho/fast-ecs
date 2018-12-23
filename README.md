@@ -34,7 +34,10 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ECS::Engine<class System, ECS::NoGlobal, ECS::NoQueue, Position, Direction>;
+using MyEngine = ECS::Engine<
+	class System, ECS::NoGlobal, ECS::NoQueue, 
+	Position, Direction            // <-- component list
+>;
 
 //
 // SYSTEMS
