@@ -322,7 +322,8 @@ public:
     };
 
     struct Leak {
-        map<size_t, string> text {};
+        struct X { int i; };
+        map<string, vector<X>> text {};
     };
 
     using MyEngine = ECS::Engine<System, Global, Event, Position, Direction, Destructable, Leak>;
@@ -473,8 +474,11 @@ TEST_F(EngineTest, Global) {
 TEST_F(EngineTest, Leak) {
     size_t id = e.add_entity();
     e.add_component<Leak>(id, Leak {});
-    for (int i=0; i < 10000; ++i)
-        e.component<Leak>(id).text[i] = "hello";
+
+    e.for_each<Leak>([&](size_t id, Leak& leak) {
+        leak.text["hello"] = {};
+        leak.text["hello"].push_back({ 42 });
+    });
     e.remove_entity(id);
 }
 
