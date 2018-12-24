@@ -321,7 +321,11 @@ public:
         ~Destructable() { --destroy_count; }
     };
 
-    using MyEngine = ECS::Engine<System, Global, Event, Position, Direction, Destructable>;
+    struct Leak {
+        map<size_t, string> text {};
+    };
+
+    using MyEngine = ECS::Engine<System, Global, Event, Position, Direction, Destructable, Leak>;
     MyEngine e = {};
 
     size_t e1, e2;
@@ -464,6 +468,14 @@ TEST_F(EngineTest, Global) {
     EXPECT_EQ(e.global().x, 42);
     e.global().x = 24;
     EXPECT_EQ(e.global().x, 24);
+}
+
+TEST_F(EngineTest, Leak) {
+    size_t id = e.add_entity();
+    e.add_component<Leak>(id, Leak {});
+    for (int i=0; i < 10000; ++i)
+        e.component<Leak>(id).text[i] = "hello";
+    e.remove_entity(id);
 }
 
 TEST_F(EngineTest, Debugging) {
