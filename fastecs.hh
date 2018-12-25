@@ -304,9 +304,9 @@ public:
         return *static_cast<S*>(_systems.back());
     }
 
-    template<typename S> S& system() {
+    template<typename S> S const& system() const {
         for(auto& sys: _systems) {
-            S* s = dynamic_cast<S*>(sys);
+            S const* s = dynamic_cast<S const*>(sys);
             if(s) {
                 return *s;
             }

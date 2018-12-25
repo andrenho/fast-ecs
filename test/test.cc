@@ -475,7 +475,7 @@ TEST_F(EngineTest, Leak) {
     size_t id = e.add_entity();
     e.add_component<Leak>(id, Leak {});
 
-    e.for_each<Leak>([&](size_t id, Leak& leak) {
+    e.for_each<Leak>([&](size_t, Leak& leak) {
         leak.text["hello"] = {};
         leak.text["hello"].push_back({ 42 });
     });
