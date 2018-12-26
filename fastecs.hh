@@ -789,7 +789,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
                 free(demangled_name);
             }
 #endif
-            os << tname;
+            os << "'" << tname << "'";
         };
     }
 

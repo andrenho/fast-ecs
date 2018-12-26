@@ -227,8 +227,12 @@ struct MySystem : public System {
 };
 
 System&         add_system<S>(...);    // add a new system (call constructor)
-System&         system<S>();           // return a reference to a system
+System const&   system<S>() const;     // return a reference to a system
 vector<System*> systems();             // return a vector of systems to iterate, example:
+
+/* The method `system<T>` returns a const referente to a system. It is used for one
+   system to read information from another system. To make one system modify data
+   in another system, use Events.  */
 
 for(auto& sys: e.systems()) {
     sys->execute(e);
@@ -302,7 +306,7 @@ struct Direction {
 };
 
 ostream& operator<<(ostream& out, Direction const& dir) {
-    out << "Direction: " << dir.angle << " rad";
+    out << "'Direction': " << dir.angle;
     return out;
 }
 
@@ -313,8 +317,9 @@ e.examine(cout, my_entity);
 e.examine(cout);
 
 // The result is:
-Entity #0:
-  - Direction: 50 rad
+{ '0':
+  { 'Direction': 50 },
+},
 ```
 
 If the `operator<<` is not implemented for a component, the class name will be printed instead.
