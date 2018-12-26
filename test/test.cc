@@ -334,7 +334,7 @@ public:
 };
 
 ostream& operator<<(ostream& out, EngineTest::Position const& pos) {
-    out << "'Position': [ " << pos.x << ", " << pos.y << " ]";
+    out << "pos : [ " << pos.x << ", " << pos.y << " ]";
     return out;
 }
 
@@ -489,7 +489,6 @@ TEST_F(EngineTest, Leak) {
 }
 
 TEST_F(EngineTest, Debugging) {
-    e.examine_global(cout);
     e.examine(cout);
 }
 
