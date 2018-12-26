@@ -303,6 +303,7 @@ protected:
 public:
     struct Global {
         int x = 42;
+        friend ostream& operator<<(ostream& out, Global const& global);
     };
 
     struct Position {
@@ -333,7 +334,12 @@ public:
 };
 
 ostream& operator<<(ostream& out, EngineTest::Position const& pos) {
-    out << "Position: " << pos.x << ", " << pos.y;
+    out << "'Position': [ " << pos.x << ", " << pos.y << " ]";
+    return out;
+}
+
+ostream& operator<<(ostream& out, EngineTest::Global const& global) {
+    out << "'x' : " << global.x;
     return out;
 }
 
@@ -483,6 +489,7 @@ TEST_F(EngineTest, Leak) {
 }
 
 TEST_F(EngineTest, Debugging) {
+    e.examine_global(cout);
     e.examine(cout);
 }
 
