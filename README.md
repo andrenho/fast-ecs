@@ -313,7 +313,11 @@ ostream& operator<<(ostream& out, Direction const& dir) {
 // Then, to print all components of an entity:
 e.examine(cout, my_entity);
 
-// If you want to print all components of all entities:
+// If the method `operator<<` is implemented to the Global type, global data
+// can be printed with:
+e.examine_global(cout);
+
+// If you want to print all components of all entities, and the global data:
 e.examine(cout);
 
 // The result is:
