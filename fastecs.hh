@@ -128,6 +128,16 @@ private:
     }
 
 public:
+    template <typename C>
+    void add_component(size_t ent, C&& c) {
+        new(allocate_component<C>(ent)) C(std::move(c));
+    }
+
+    template <typename C>
+    void add_component(std::string const& ent, C&& c) {
+        new(allocate_component<C>(ent)) C(std::move(c));
+    }
+
     template<typename C, typename... P> 
     void add_component(size_t ent, P&& ...pars) {
         new(allocate_component<C>(ent)) C(pars...);

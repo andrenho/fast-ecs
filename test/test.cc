@@ -297,7 +297,7 @@ protected:
         e.add_component<Position>(e1, 40.f, 50.f);
         e.add_component<Direction>(e1, 60.f);
 
-        e.add_component<Direction>(e2, 70.f);
+        e.add_component(e2, Direction { 70.f });
     }
 
 public:

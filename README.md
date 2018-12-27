@@ -152,6 +152,7 @@ Also, remember that entities and components might be moved within the array, so 
 
 ```C++
 C&   add_component<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
+C&   add_component(size_t entity, C&& c);    // add a new existing component to an entity
 void remove_component<C>(size_t entity);     // remove component from entity
 
 bool has_component<C>(size_t entity);        // return true if entity contains a component
