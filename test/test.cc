@@ -479,6 +479,12 @@ TEST_F(EngineTest, Leak) {
         leak.text["hello"] = {};
         leak.text["hello"].push_back({ 42 });
     });
+    for (auto const& [strn, nums] : e.component<Leak>(id).text) {
+        cout << strn << ": (";
+        for (auto const& num : nums)
+            cout << num.i << ",";
+        cout << ")" << endl;
+    }
     e.remove_entity(id);
 }
 
