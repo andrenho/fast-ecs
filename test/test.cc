@@ -297,12 +297,13 @@ protected:
         e.add_component<Position>(e1, 40.f, 50.f);
         e.add_component<Direction>(e1, 60.f);
 
-        e.add_component<Direction>(e2, 70.f);
+        e.add_component(e2, Direction { 70.f });
     }
 
 public:
     struct Global {
         int x = 42;
+        friend ostream& operator<<(ostream& out, Global const& global);
     };
 
     struct Position {
@@ -333,7 +334,12 @@ public:
 };
 
 ostream& operator<<(ostream& out, EngineTest::Position const& pos) {
-    out << "Position: " << pos.x << ", " << pos.y;
+    out << "pos : [ " << pos.x << ", " << pos.y << " ]";
+    return out;
+}
+
+ostream& operator<<(ostream& out, EngineTest::Global const& global) {
+    out << "'x' : " << global.x;
     return out;
 }
 

@@ -152,6 +152,7 @@ Also, remember that entities and components might be moved within the array, so 
 
 ```C++
 C&   add_component<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
+C&   add_component(size_t entity, C&& c);    // add a new existing component to an entity
 void remove_component<C>(size_t entity);     // remove component from entity
 
 bool has_component<C>(size_t entity);        // return true if entity contains a component
@@ -227,8 +228,12 @@ struct MySystem : public System {
 };
 
 System&         add_system<S>(...);    // add a new system (call constructor)
-System&         system<S>();           // return a reference to a system
+System const&   system<S>() const;     // return a reference to a system
 vector<System*> systems();             // return a vector of systems to iterate, example:
+
+/* The method `system<T>` returns a const referente to a system. It is used for one
+   system to read information from another system. To make one system modify data
+   in another system, use Events.  */
 
 for(auto& sys: e.systems()) {
     sys->execute(e);
@@ -302,19 +307,24 @@ struct Direction {
 };
 
 ostream& operator<<(ostream& out, Direction const& dir) {
-    out << "Direction: " << dir.angle << " rad";
+    out << "'Direction': " << dir.angle;
     return out;
 }
 
 // Then, to print all components of an entity:
 e.examine(cout, my_entity);
 
-// If you want to print all components of all entities:
+// If the method `operator<<` is implemented to the Global type, global data
+// can be printed with:
+e.examine_global(cout);
+
+// If you want to print all components of all entities, and the global data:
 e.examine(cout);
 
 // The result is:
-Entity #0:
-  - Direction: 50 rad
+{ '0':
+  { 'Direction': 50 },
+},
 ```
 
 If the `operator<<` is not implemented for a component, the class name will be printed instead.

@@ -128,6 +128,16 @@ private:
     }
 
 public:
+    template <typename C>
+    void add_component(size_t ent, C&& c) {
+        new(allocate_component<C>(ent)) C(std::move(c));
+    }
+
+    template <typename C>
+    void add_component(std::string const& ent, C&& c) {
+        new(allocate_component<C>(ent)) C(std::move(c));
+    }
+
     template<typename C, typename... P> 
     void add_component(size_t ent, P&& ...pars) {
         new(allocate_component<C>(ent)) C(pars...);
@@ -349,29 +359,71 @@ private:
     //
     // DEBUGGING
     //
+private:
+    // check if class has operator<<
+    template<typename T>
+    struct has_ostream_method
+    {
+    private:
+        typedef std::true_type  yes;
+        typedef std::false_type no;
+
+        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
+        template<typename> static no test(...);
+    public:
+        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
+    };
+
 public:
     void examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
         auto examine_entity = [&](size_t entity, uint8_t const* entity_ptr) {
-            os << "Entity #" << entity << "\n";
+            os << "  '" << entity << "': {\n";
+            bool first = true;
+            for (auto const& [name, id] : _entities) {
+                if (id == entity) {
+                    if (first) {
+                        os << "    'names' : [ ";
+                        first = false;
+                    }
+                    os << "'" << name << "', ";
+                }
+            }
+            if (!first)
+                os << "]\n";
             _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
-                os << "  - ";
+                os << "    ";
                 _debuggers[c->id](os, data);
-                os << "\n";
+                os << ",\n";
                 return false;
             });
+            os << "  },\n";
             return false;
         };
+        os << "{\n";
         if(entity == std::numeric_limits<size_t>::max()) {
+            examine_global(os);
             _rd.for_each_entity(examine_entity);
         } else {
             examine_entity(entity, _rd.entity_ptr(entity));
         }
+        os << "}\n";
     }
 
     void examine(std::ostream& os, std::string const& ent) const {
         examine(os, entity(ent));
     }
- 
+
+    // execute operator<< of global (with and without)
+    template<typename T=Global, typename std::enable_if<has_ostream_method<T>::value>::type* = nullptr>
+    void examine_global(std::ostream& os) const {
+        os << "  'global': {\n    " << global() << "\n  },\n";
+    }
+
+    template<typename T=Global, typename std::enable_if<!has_ostream_method<T>::value>::type* = nullptr>
+    void examine_global(std::ostream& os) const {
+        (void) os;
+    }
+
 #ifndef GTEST
 private:
 #endif
@@ -740,26 +792,23 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
         return tuple_index<C, ComponentTuple>::value;
     }
     
-    // check if class has operator<<
-    template<typename T>
-    struct has_ostream_method
-    {
-    private:
-        typedef std::true_type  yes;
-        typedef std::false_type no;
-
-        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
-        template<typename> static no test(...);
-    public:
-        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
-    };
-
     // execute operator<< of struct (with and without)
     template<typename C, typename std::enable_if<has_ostream_method<C>::value>::type* = nullptr>
     std::function<void(std::ostream&, void const*)> create_debugger() {
         return [](std::ostream& os, void const* data) {
             C const* c = reinterpret_cast<C const*>(data);
-            os << *c;
+
+            int status;
+            std::string tname = typeid(C).name();
+#ifndef NOABI
+            char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
+            if(status == 0) {
+                tname = demangled_name;
+                free(demangled_name);
+            }
+#endif
+
+            os << "'" << tname << "': { " << *c << " }";
         };
     }
 
@@ -775,7 +824,7 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
                 free(demangled_name);
             }
 #endif
-            os << tname;
+            os << "'" << tname << "': {}";
         };
     }
 

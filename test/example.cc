@@ -7,12 +7,10 @@
 //
 
 struct Position {
-    Position(float x, float y) : x(x), y(y) {}
     float x, y;
 };
 
 struct Direction {
-    Direction(float angle) : angle(angle) {}
     float angle;
 };
 
@@ -63,10 +61,10 @@ int main()
     size_t e1 = e.add_entity(),
            e2 = e.add_entity();
 
-    e.add_component<Position>(e1, 20.f, 30.f);
-    e.add_component<Direction>(e1, 1.2f);
+    e.add_component(e1, Position { 20.f, 30.f });
+    e.add_component(e1, Direction { 1.2f });
 
-    e.add_component<Position>(e2, 40.f, 50.f);
+    e.add_component(e2, Position { 40.f, 50.f });
     e.component<Position>(e2).x = 100.f;
 
     e.add_system<PositionSystem>();
