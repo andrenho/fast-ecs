@@ -437,6 +437,10 @@ private:
         static_assert(std::is_unsigned<component_size_t>::value, "Component size type must be signed.");
 
     public:
+        RawData() {
+            _ary.reserve(64 * 1024);
+        }
+
         struct Entity {
             entity_size_t sz;
             void*         data;
