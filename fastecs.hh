@@ -129,12 +129,12 @@ private:
 
 public:
     template <typename C>
-    void add_component(size_t ent, C&& c) {
+    void add_component(size_t ent, C c) {
         new(allocate_component<C>(ent)) C(std::move(c));
     }
 
     template <typename C>
-    void add_component(std::string const& ent, C&& c) {
+    void add_component(std::string const& ent, C c) {
         new(allocate_component<C>(ent)) C(std::move(c));
     }
 
@@ -659,6 +659,10 @@ private:
         FRIEND_TEST(RawTest, DifferentSizes);
         FRIEND_TEST(RawTest, InvalidSizes);
         FRIEND_TEST(RawTest, IterateConst);
+
+        FRIEND_TEST(RawTestStr, add_entities_and_components);
+
+        FRIEND_TEST(EngineLeakTest, Leak);
 #endif
 
         std::vector<size_t> _entities = {};

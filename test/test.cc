@@ -323,8 +323,7 @@ public:
     };
 
     struct Leak {
-        struct X { int i; };
-        map<string, vector<X>> text {};
+        string test;
     };
 
     using MyEngine = ECS::Engine<System, Global, Event, Position, Direction, Destructable, Leak>;
@@ -477,26 +476,132 @@ TEST_F(EngineTest, Global) {
     EXPECT_EQ(e.global().x, 24);
 }
 
-TEST_F(EngineTest, Leak) {
-    size_t id = e.add_entity();
-    e.add_component<Leak>(id, Leak {});
-
-    e.for_each<Leak>([&](size_t, Leak& leak) {
-        leak.text["hello"] = {};
-        leak.text["hello"].push_back({ 42 });
-    });
-    for (auto const& [strn, nums] : e.component<Leak>(id).text) {
-        cout << strn << ": (";
-        for (auto const& num : nums)
-            cout << num.i << ",";
-        cout << ")" << endl;
-    }
-    e.remove_entity(id);
-}
-
 TEST_F(EngineTest, Debugging) {
     e.examine(cout);
 }
+
+//------------------------------------------------------------------------
+
+// {{{ TEST RAWDATA WITH STRING
+
+class RawTestStr : public ::testing::Test {
+public:
+    struct Leak { string test; };
+    
+    static_assert(sizeof(Leak) == 32);
+
+    using RawDataStr = ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,Leak>::RawData<int8_t, uint8_t, uint8_t>;
+    RawDataStr rd = {};
+
+public:
+    size_t e1 = 0, e2 = 0;
+};
+
+
+TEST_F(RawTestStr, add_entities_and_components) {
+    EXPECT_EQ(rd._ary.size(), 0);
+
+    // add entity
+    size_t e1 = rd.add_entity();
+    EXPECT_EQ(e1, 0);
+    EXPECT_EQ(rd._ary.size(), 1);
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 1, }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
+
+    // add component
+    RawTestStr::Leak my = { "hello" };
+    rd.add_component(e1, sizeof my, 7, &my);
+
+    // check entity + component
+    EXPECT_EQ(rd._ary.size(), 1 + 1 + 1 + sizeof(string));  // entity + size + id + data
+    vector<uint8_t> comp1 { 
+        sizeof(string) + 2, // entity 0
+        sizeof(string),     // component 0:0 size
+        7,                  // component 0:0 id
+    };
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
+    EXPECT_TRUE(equal(rd._ary.begin(), rd._ary.begin() + comp1.size(), comp1.begin()));
+
+#if 0
+    // store string data for later comparison
+    vector<uint8_t> string_data(rd._ary.begin() + 8, rd._ary.end());
+    EXPECT_EQ(string_data.size(), 32);
+    auto check_string_data = [&](auto comp1, auto comp2) {
+        vector<uint8_t> comp_data(comp1, comp2);
+        EXPECT_EQ(comp_data, string_data);
+    };
+    check_string_data(rd._ary.begin() + 8, rd._ary.begin() + 8 + sizeof(string));
+
+    // add new entity
+    size_t e2 = rd.add_entity();
+    EXPECT_EQ(e2, 1);
+    EXPECT_EQ(rd._ary.size(), 4 + 2 + 2 + sizeof(string) + 4);  // entity0 + size + id + data + entity1
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 40 }));
+    check_string_data(rd._ary.begin() + 8, rd._ary.begin() + 8 + sizeof(string));
+
+    // add new entity
+    size_t e3 = rd.add_entity();
+    EXPECT_EQ(e3, 2);
+    EXPECT_EQ(rd._ary.size(), 4 + 2 + 2 + sizeof(string) + 8);  // entity0 + size + id + data + entity1..2
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 40, 44 }));
+    check_string_data(rd._ary.begin() + 8, rd._ary.begin() + 8 + sizeof(string));
+
+    // add new entity
+    size_t e4 = rd.add_entity();
+    EXPECT_EQ(e4, 3);
+    EXPECT_EQ(rd._ary.size(), 4 + 2 + 2 + sizeof(string) + 12);  // entity0 + size + id + data + entity1..3
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 40, 44, 48 }));
+    check_string_data(rd._ary.begin() + 8, rd._ary.begin() + 8 + sizeof(string));
+
+    // add new entity
+    size_t e5 = rd.add_entity();
+    EXPECT_EQ(e5, 4);
+    EXPECT_EQ(rd._ary.size(), 4 + 2 + 2 + sizeof(string) + 16);  // entity0 + size + id + data + entity1..4
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 40, 44, 48, 52 }));
+    check_string_data(rd._ary.begin() + 8, rd._ary.begin() + 8 + sizeof(string));
+
+    // try to get the component back
+    rd.for_each_component_in_entity(rd.entity_ptr(e1), [&](decltype(rd)::Component* c, void* data, int32_t) {
+        EXPECT_EQ(c->id, 7);
+        Leak* my = reinterpret_cast<Leak*>(data);
+        EXPECT_EQ(my->test, "hello");
+        return true;
+    });
+#endif
+}
+
+// }}}
+
+//------------------------------------------------------------------------
+
+class EngineLeakTest : public ::testing::Test {
+public:
+    struct Leak {
+        string test;
+    };
+
+    using MyEngine = ECS::Engine<int, ECS::NoGlobal, ECS::NoQueue, Leak>;
+    MyEngine e = {};
+};
+
+TEST_F(EngineLeakTest, Leak) {
+    size_t id = e.add_entity();
+    EXPECT_EQ(e._rd._ary.size(), 4);
+    EXPECT_EQ(e._rd._ary, vector<uint8_t>({ 4, 0, 0, 0 }));
+    EXPECT_EQ(e._rd._entities, vector<size_t>({ 0 }));
+
+    e.add_component(id, Leak { "hello" });
+
+    e.add_entity();
+    EXPECT_EQ(e.component<Leak>(id).test, "hello");
+    e.for_each<Leak>([&](size_t, Leak& leak) { EXPECT_EQ(leak.test, "hello"); });
+    e.add_entity();
+    EXPECT_EQ(e.component<Leak>(id).test, "hello");
+    e.for_each<Leak>([&](size_t, Leak& leak) { EXPECT_EQ(leak.test, "hello"); });
+
+    e.remove_entity(id);
+}
+
 
 }  // namespace ECS
 
