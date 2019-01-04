@@ -133,7 +133,18 @@ public:
     }
 
     template <typename C>
-    void     remove_component(EntityOrName const& ent);
+    void     remove_component(EntityOrName const& ent) {
+        // {{{ ...
+        Entity id = entity(ent);
+        auto& vec = comp_vec<C>(_entities.at(id));
+        auto it = std::lower_bound(begin(vec), end(vec), id,
+            [](auto const& p, Entity const& e) { return p.first < e; });
+        if (it != vec.end() && it->first == id)
+            vec.erase(it);
+        else
+            throw ECSError(std::string("Entity ") + std::to_string(id.get()) + " has no component '" + component_name<C>() + "'.");
+        // }}}
+    }
 
     template <typename C>
     static std::string component_name() {

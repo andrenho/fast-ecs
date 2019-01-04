@@ -48,9 +48,7 @@ TEST_CASE("entities") {
 
 TEST_CASE("components") {
 
-    struct A { 
-        int x;
-    };
+    struct A { int x; };
     struct B { string y; };
 
     Engine<NoSystem, NoGlobal, NoEventQueue, A, B> e;
@@ -59,6 +57,7 @@ TEST_CASE("components") {
     A& a = e.add_component<A>(id, 42);
     CHECK_THROWS(e.add_component<A>(id, 43));
     CHECK(a.x == 42);
+    e.add_component<B>(id, "hello");
 
     Entity id2 = e.add_entity(),
            id3 = e.add_entity();
@@ -78,7 +77,17 @@ TEST_CASE("components") {
     CHECK(!e.has_component<A>(id4));
     CHECK_THROWS(e.component<A>(id4));
 
-    // TODO - remove component
+    CHECK(e.component<B>(id).y == "hello");
+
+    e.remove_component<A>(id);
+    CHECK_THROWS(e.remove_component<A>(id));
+    CHECK(e.component<B>(id).y == "hello");
+    CHECK(e.component<A>(id2).x == 43);
+    CHECK_THROWS(e.component<A>(id));
+    
+    e.remove_entity(id);
+    CHECK_THROWS(e.component<A>(id));
+    CHECK_THROWS(e.component<B>(id));
 }
 
 #if 0  // {{{
