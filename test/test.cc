@@ -484,9 +484,67 @@ TEST_F(EngineTest, Debugging) {
 
 // {{{ TEST RAWDATA WITH STRING
 
+class RawTestData : public ::testing::Test {
+public:
+    using RawData = ECS::Engine<int,ECS::NoGlobal,ECS::NoQueue,uint8_t[64]>::RawData<int8_t, uint8_t, uint8_t>;
+    RawData rd = {};
+};
+
+TEST_F(RawTestData, vector_data) {
+    auto print = [](auto const& rd) {
+        printf("_entities: ");
+        for (auto e : rd._entities)
+            printf("%zu, ", e);
+        printf("\n_ary: %p [data: %p]\n", &rd._ary, rd._ary.data());
+        for (size_t i=0; i < rd._ary.size(); ++i) {
+            printf("%3d ", rd._ary.at(i));
+            if (i % 16 == 15)
+                printf("\n");
+            else if (i % 8 == 7)
+                printf("  ");
+        }
+        printf("\n--------------------------------\n");
+    };
+
+    const size_t SZ = 32;
+
+    EXPECT_EQ(rd._ary.size(), 0);
+
+    // add entity
+    size_t e1 = rd.add_entity();
+    EXPECT_EQ(e1, 0);
+    EXPECT_EQ(rd._ary.size(), 1);
+    EXPECT_EQ(rd._ary, vector<uint8_t>({ 1, }));
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
+    print(rd);
+
+    // add component
+    uint8_t component[SZ] = { 0 };
+    for (uint8_t i=0; i<SZ; ++i)
+        component[i] = i;
+    rd.add_component(e1, sizeof component, 0xA0, component);
+    print(rd);
+    
+    auto check_array = [&](auto it) {
+        for (size_t i=0; i<SZ; ++i)
+            EXPECT_EQ(*(it + i), i);
+    };
+    check_array(rd._ary.begin() + 3);
+
+    // add new entity
+    size_t e2 = rd.add_entity();
+    EXPECT_EQ(e2, 1);
+    EXPECT_EQ(rd._ary.size(), 1 + 1 + 1 + sizeof(string) + 1);  // entity0 + size + id + data + entity1
+    EXPECT_EQ(rd._entities, vector<size_t>({ 0, 3 + sizeof(string) }));
+    print(rd);
+    check_array(rd._ary.begin() + 3);
+}
+
+
 class RawTestStr : public ::testing::Test {
 public:
     struct Leak { string test; };
+    Leak my = { "hello" };
     
     static_assert(sizeof(Leak) == 32);
 
@@ -498,19 +556,38 @@ public:
 };
 
 
+
 TEST_F(RawTestStr, add_entities_and_components) {
+    auto print = [](auto const& rd) {
+        printf("_entities: ");
+        for (auto e : rd._entities)
+            printf("%zu, ", e);
+        printf("\n_ary: %p [data: %p]\n", &rd._ary, rd._ary.data());
+        for (size_t i=0; i < rd._ary.size(); ++i) {
+            printf("%02X ", rd._ary.at(i));
+            if (i % 16 == 15)
+                printf("\n");
+            else if (i % 8 == 7)
+                printf("  ");
+        }
+        printf("\n--------------------------------\n");
+    };
+
     EXPECT_EQ(rd._ary.size(), 0);
 
     // add entity
     size_t e1 = rd.add_entity();
+    print(rd);
     EXPECT_EQ(e1, 0);
     EXPECT_EQ(rd._ary.size(), 1);
     EXPECT_EQ(rd._ary, vector<uint8_t>({ 1, }));
     EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
 
     // add component
-    RawTestStr::Leak my = { "hello" };
     rd.add_component(e1, sizeof my, 7, &my);
+    print(rd);   // <-- valgrind reports unitialized value here, when going through the 25th (?) byte
+    // my conclusion on that is that is because libstdc++ does not initialize the final bytes on the
+    // std::string, and thus this is harmless
 
     // check entity + component
     EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
@@ -565,6 +642,9 @@ class EngineLeakTest : public ::testing::Test {
 public:
     struct Leak {
         string test;
+
+        Leak(string const& test) : test(test) {}
+        ~Leak() { cout << "LEAK destructor called!\n"; }
     };
 
     using MyEngine = ECS::Engine<int, ECS::NoGlobal, ECS::NoQueue, Leak>;
@@ -572,6 +652,21 @@ public:
 };
 
 TEST_F(EngineLeakTest, Leak) {
+    auto print = [](auto const& rd) {
+        printf("_entities: ");
+        for (auto e : rd._entities)
+            printf("%zu, ", e);
+        printf("\n_ary: %p [data: %p]\n", &rd._ary, rd._ary.data());
+        for (size_t i=0; i < rd._ary.size(); ++i) {
+            printf("%02X ", rd._ary.at(i));
+            if (i % 16 == 15)
+                printf("\n");
+            else if (i % 8 == 7)
+                printf("  ");
+        }
+        printf("\n--------------------------------\n");
+    };
+
     auto const& rd = e._rd;
 
     // add entity
@@ -582,7 +677,8 @@ TEST_F(EngineLeakTest, Leak) {
     EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
 
     // add component
-    e.add_component(id, Leak { "hello" });
+    e.add_component<Leak>(id, "hello"s);
+    // e.add_component(id, Leak { "hello" });
 
     // check low level
     EXPECT_EQ(rd._entities, vector<size_t>({ 0 }));
@@ -590,6 +686,11 @@ TEST_F(EngineLeakTest, Leak) {
     EXPECT_EQ(rd._ary.at(0), sizeof(string) + 3);  // entity 0 size
     EXPECT_EQ(rd._ary.at(1), sizeof(string));      // component 0 size
     EXPECT_EQ(rd._ary.at(2), 0);                   // component 0 id
+
+    string const* mystr0 = reinterpret_cast<string const*>(rd._ary.data() + 3);
+    EXPECT_EQ(*mystr0, "hello");
+    printf("string: %p\n", mystr0);
+    print(rd);
 
     // store string data for later comparison
     vector<uint8_t> string_data(rd._ary.begin() + 3, rd._ary.end());
@@ -616,20 +717,32 @@ TEST_F(EngineLeakTest, Leak) {
     EXPECT_EQ(rd._ary.at(2), 0);                   // component 0 id
     EXPECT_EQ(rd._ary.at(3 + sizeof(string)), 1);  // entity 1 size
 
-    string const* mystr1 = reinterpret_cast<string const*>(rd._ary.data() + 3);    // TODO why do I not have an error here...
-    printf("%p\n", rd._ary.data());
+    string const* mystr1 = reinterpret_cast<string const*>(rd._ary.data() + 3);
+    printf("string: %p\n", mystr1);
+    print(rd);
     EXPECT_EQ(*mystr1, "hello");
+    /* TODO
+     * 
+     * Here I'm having an error. This is because the string inside the _ary vector
+     * was relocaded. However, internally, std::string contains a pointer to its
+     * data, which is located inside the string. When this data is moved, this pointer
+     * is still pointing to the old location.
+     *
+     * The solution here is to, somehow, use std::move to move this string.
+     */
 
     check_string_data(rd._ary.begin() + 3, rd._ary.begin() + 3 + sizeof(string));
 
-    string const* mystr2 = reinterpret_cast<string const*>(rd._ary.data() + 3);    // but I get an error here?
-    printf("%p\n", rd._ary.data());
+    string const* mystr2 = reinterpret_cast<string const*>(rd._ary.data() + 3);
     EXPECT_EQ(*mystr2, "hello");
 
     EXPECT_EQ(rd.entity_ptr(id), rd._ary.data());
     EXPECT_EQ(rd.entity_ptr(e2), rd._ary.data() + 3 + sizeof(string));
 
+    /*
     rd.for_each_component_in_entity(rd.entity_ptr(id), [&](decltype(e._rd)::Component const* c, void const* data, int8_t) {
+        printf("Into foreach:     _ary: %p    data: %p\n", rd._ary.data(), data);
+
         EXPECT_EQ(c->id, 0);
 
         EXPECT_EQ(data, rd._ary.data() + 3);
@@ -653,6 +766,7 @@ TEST_F(EngineLeakTest, Leak) {
     e.for_each<Leak>([&](size_t, Leak& leak) { EXPECT_EQ(leak.test, "hello"); });
 
     e.remove_entity(id);
+    */
 }
 
 }  // namespace ECS

@@ -438,7 +438,7 @@ private:
 
     public:
         RawData() {
-            _ary.reserve(64 * 1024);
+            // _ary.reserve(64 * 1024);
         }
 
         struct Entity {
@@ -664,6 +664,7 @@ private:
         FRIEND_TEST(RawTest, InvalidSizes);
         FRIEND_TEST(RawTest, IterateConst);
 
+        FRIEND_TEST(RawTestData, vector_data);
         FRIEND_TEST(RawTestStr, add_entities_and_components);
 
         FRIEND_TEST(EngineLeakTest, Leak);
