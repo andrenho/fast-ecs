@@ -677,7 +677,7 @@ private:
             if(pos == -1) {
                 pos = _ary.size();
             }
-            _ary.insert(begin(_ary)+pos, sz, 0);
+            _ary.insert(begin(_ary)+pos, sz, 0);    // IMPORTANT! _ary might relocate here!
             _ary_copy_bytes(origin, sz, pos);
         }
 
@@ -715,7 +715,7 @@ private:
             if(entity_sz + total_sz > std::numeric_limits<entity_size_t>::max()) {
                 throw ECSError("By adding this component, the entity would become too large.");
             }
-            _ary.insert(begin(_ary) + idx + entity_sz, total_sz, 0);
+            _ary.insert(begin(_ary) + idx + entity_sz, total_sz, 0);  // IMPORTANT! _ary can relocate here!
             // adjust indexes
             for(auto it=begin(_entities)+entity+1; it != end(_entities); ++it) {
                 *it += total_sz;

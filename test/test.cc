@@ -591,8 +591,6 @@ TEST_F(EngineLeakTest, Leak) {
     EXPECT_EQ(rd._ary.at(1), sizeof(string));      // component 0 size
     EXPECT_EQ(rd._ary.at(2), 0);                   // component 0 id
 
-    { string const* my = reinterpret_cast<string const*>(rd._ary.data() + 3); }
-
     // store string data for later comparison
     vector<uint8_t> string_data(rd._ary.begin() + 3, rd._ary.end());
     EXPECT_EQ(string_data.size(), sizeof(string));
@@ -607,7 +605,7 @@ TEST_F(EngineLeakTest, Leak) {
     e.for_each<Leak>([&](size_t, Leak& leak) { EXPECT_EQ(leak.test, "hello"); });
 
     // add new entity
-    size_t e2 = e.add_entity();
+    size_t e2 = e.add_entity();         // ATENTION! _ary is being invalidated here
 
     // check low level
     EXPECT_EQ(e2, 1);
@@ -617,7 +615,16 @@ TEST_F(EngineLeakTest, Leak) {
     EXPECT_EQ(rd._ary.at(1), sizeof(string));      // component 0 size
     EXPECT_EQ(rd._ary.at(2), 0);                   // component 0 id
     EXPECT_EQ(rd._ary.at(3 + sizeof(string)), 1);  // entity 1 size
+
+    string const* mystr1 = reinterpret_cast<string const*>(rd._ary.data() + 3);    // TODO why do I not have an error here...
+    printf("%p\n", rd._ary.data());
+    EXPECT_EQ(*mystr1, "hello");
+
     check_string_data(rd._ary.begin() + 3, rd._ary.begin() + 3 + sizeof(string));
+
+    string const* mystr2 = reinterpret_cast<string const*>(rd._ary.data() + 3);    // but I get an error here?
+    printf("%p\n", rd._ary.data());
+    EXPECT_EQ(*mystr2, "hello");
 
     EXPECT_EQ(rd.entity_ptr(id), rd._ary.data());
     EXPECT_EQ(rd.entity_ptr(e2), rd._ary.data() + 3 + sizeof(string));
