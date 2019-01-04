@@ -1,27 +1,52 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#include <algorithm>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <optional>
+#include <utility>
+#include <tuple>
+#include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 #ifndef NOABI
 #  include <cxxabi.h>
 #endif
 
-#ifdef GTEST
-#  include <gtest/gtest_prod.h>
-#endif
-
 namespace ecs {
+
+class ECSError : public std::runtime_error {
+public:
+    explicit ECSError(std::string const& what_arg) : runtime_error(what_arg) {}
+    explicit ECSError(const char* what_arg)        : runtime_error(what_arg) {}
+};
 
 struct NoSystem {};
 struct NoGlobal {};
-using  NoEventQueue = std::variant<int>;
+using  NoEventQueue = std::variant<>;
 
 struct Entity {
+    size_t get()                          { return value; }
+    // {{{ ...
+    explicit Entity(size_t value)           : value(value) {}
+    explicit Entity(Entity&& entity)        : value(std::move(entity.value)) {}
+    size_t   get() const                    { return value; }
+
+    Entity(Entity const& e)                 : value(e.get()) {}
+    Entity& operator=(Entity const& e)      { value = e.value; return *this; }
+
+    bool operator==(Entity const& e) const  { return value == e.get(); }
+
+private:
+    size_t   value;
+    // }}}
 };
+
+using EntityOrName = std::variant<Entity, std::string>;
 
 template <typename System, typename Global, typename Event, typename... Components>
 class Engine {
@@ -30,36 +55,40 @@ public:
     // entities
 
     Entity   add_entity(std::optional<std::string> const& name = {});
-    void     remove_entity(Entity const& ent);
 
-    void     set_entity_active(Entity const& ent, bool active);
-    void     set_entity_debugging_info(Entity const& ent, std::string const& text);
+    bool     is_entity_active(EntityOrName const& ent) const;
+    void     set_entity_active(EntityOrName const& ent, bool active);
+
+    std::string const&  debugging_info(EntityOrName const& ent) const;
+    void     set_entity_debugging_info(EntityOrName const& ent, std::string const& text);
+
+    void     remove_entity(EntityOrName const& ent);
 
     // components
 
     template <typename C>
-    C&       add_component(Entity const& ent, C&& c);
+    C&       add_component(EntityOrName const& ent, C&& c);
 
     template <typename C, typename... P>
-    C&       add_component(Entity const& ent, P&& ...pars);
+    C&       add_component(EntityOrName const& ent, P&& ...pars);
 
     template <typename C>
-    bool     has_component(Entity const& ent) const;
+    bool     has_component(EntityOrName const& ent) const;
 
     template <typename C>
-    C&       component(Entity const& ent);
+    C&       component(EntityOrName const& ent);
 
     template <typename C>
-    C const& component(Entity const& ent) const;
+    C const& component(EntityOrName const& ent) const;
 
     template <typename C>
-    C*       component_ptr(Entity const& ent);
+    C*       component_ptr(EntityOrName const& ent);
 
     template <typename C>
-    C const* component_ptr(Entity const& ent) const;
+    C const* component_ptr(EntityOrName const& ent) const;
 
     template <typename C>
-    void     remove_component(Entity const& ent);
+    void     remove_component(EntityOrName const& ent);
 
     // iteration
 
@@ -97,10 +126,10 @@ public:
     
     // debugging
 
-    void           debug_entity(std::ostream& os, Entity const& ent) const;
+    void           debug_entity(std::ostream& os, EntityOrName const& ent) const;
 
     template <typename C>
-    void           debug_component(std::ostream& os, Entity const& ent) const;
+    void           debug_component(std::ostream& os, EntityOrName const& ent) const;
 
     void           debug_entities(std::ostream& os) const;
     void           debug_systems(std::ostream& os) const;
@@ -108,11 +137,122 @@ public:
     void           debug_event_queue(std::ostream& os) const;
 
     void           debug_all(std::ostream& os) const;
+
+    // information
+
+    size_t number_of_entities() const;
+    size_t number_of_components() const;
+    size_t number_of_events() const;
+    size_t number_of_systems() const;
+    size_t event_queue_size() const;
+    size_t memory_used() const;
+
+private:
+    // {{{ templates
+    
+    // create a tuple from the component list
+
+    using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
+    static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
+
+    // }}}
+    
+    // {{{ private
+    
+    struct ConcreteEntity {
+        Entity entity;
+        bool   active;
+    };
+
+    std::vector<ConcreteEntity>   _entities = {};
+    ComponentTupleVector          _components = {};
+    std::map<std::string, Entity> _named_entities = {};
+
+    Entity entity(EntityOrName const& ent) const {
+        if (auto s = std::get_if<std::string>(&ent)) {
+            try {
+                return _named_entities.at(*s);
+            } catch (std::out_of_range&) {
+                throw ECSError("Entity '"s + *s + "' was not found.");
+            }
+        } else {
+            Entity entity = get<Entity>(ent);
+            if (find_if(begin(_entities), end(_entities), [&](ConcreteEntity const& ce) { return ce.entity == entity; }) == end(_entities))
+                throw ECSError("Entity "s + to_string(entity.get()) + " was not found.");
+            return entity;
+        }
+    }
+
+    // }}}
+
 };
+
+// {{{ inline implementation
+
+// 
+// ENTITIES
+//
+
+template <typename System, typename Global, typename Event, typename... Components>
+Entity
+Engine<System, Global, Event, Components...>::add_entity(std::optional<std::string> const& name)
+{
+    if (_entities.empty()) {
+        _entities.push_back({ Entity(0), true });
+    } else {
+        size_t id = _entities.back().entity.get() + 1;
+        _entities.push_back({ Entity(id), true });
+    }
+
+    if (name)
+        _named_entities.insert_or_assign(name.value(), _entities.back().entity);
+
+    return _entities.back().entity;
+}
+
+template <typename System, typename Global, typename Event, typename... Components>
+bool
+Engine<System, Global, Event, Components...>::is_entity_active(EntityOrName const& ent) const
+{
+    return std::lower_bound(
+            begin(_entities), end(_entities),
+            entity(ent), 
+            [](ConcreteEntity const& ce, Entity const& e) { return ce.entity.get() < e.get(); }
+        )->active;
+}
+
+template <typename System, typename Global, typename Event, typename... Components>
+void
+Engine<System, Global, Event, Components...>::set_entity_active(EntityOrName const& ent, bool active)
+{
+    std::lower_bound(
+            begin(_entities), end(_entities),
+            entity(ent), 
+            [](ConcreteEntity const& ce, Entity const& e) { return ce.entity.get() < e.get(); }
+        )->active = active;
+}
+
+// 
+// INFO
+//
+
+template <typename System, typename Global, typename Event, typename... Components>
+size_t
+Engine<System, Global, Event, Components...>::number_of_entities() const 
+{
+    return _entities.size();
+    /*
+    std::vector<size_t> counts;
+    (counts.push_back(std::get<std::vector<std::pair<Entity, Components>>>(_components).size()), ...);
+    return *std::max_element(begin(counts), end(counts));
+    */
+}
+
+// }}}
 
 }
 
-#if 0  // {{{
+#if 0  // {{{   old implementation
 
 #include <algorithm>
 #include <csetjmp>

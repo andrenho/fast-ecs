@@ -15,8 +15,21 @@ TEST_CASE("entities") {
     Engine<NoSystem, NoGlobal, NoEventQueue, C> e;
 
     // simple entity
-    Entity id = e.add_entity();
+    CHECK(e.number_of_entities() == 0);
 
+    Entity id = e.add_entity();
+    CHECK(id.get() == 0);
+    CHECK(e.number_of_entities() == 1);
+
+    Entity id2 = e.add_entity("test");
+    CHECK(id2.get() == 1);
+    CHECK(e.number_of_entities() == 2);
+
+    CHECK(e.is_entity_active("test"));
+    e.set_entity_active("test", false);
+    CHECK(!e.is_entity_active(id2));
+    CHECK(!e.is_entity_active("test"));
+    CHECK(e.is_entity_active(id));
 }
 
 #if 0  // {{{
