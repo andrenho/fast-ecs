@@ -30,6 +30,19 @@ TEST_CASE("entities") {
     CHECK(!e.is_entity_active(id2));
     CHECK(!e.is_entity_active("test"));
     CHECK(e.is_entity_active(id));
+
+    e.set_entity_debugging_info(id, "debugging_info");
+    CHECK(e.entity_debugging_info(id).value() == "debugging_info");
+    CHECK(!e.entity_debugging_info(id2));
+
+    e.remove_entity(id);
+    CHECK(e.number_of_entities() == 1);
+
+    CHECK_THROWS(e.is_entity_active(id));
+    CHECK_THROWS(e.set_entity_active(id, false));
+    CHECK_THROWS(e.set_entity_debugging_info(id, ""));
+    CHECK_THROWS(e.entity_debugging_info(id));
+    CHECK_THROWS(e.remove_entity(id));
 }
 
 #if 0  // {{{

@@ -40,6 +40,7 @@ struct Entity {
     Entity& operator=(Entity const& e)      { value = e.value; return *this; }
 
     bool operator==(Entity const& e) const  { return value == e.get(); }
+    bool operator<(Entity const& e) const   { return value < e.get(); }
 
 private:
     size_t   value;
@@ -59,8 +60,8 @@ public:
     bool     is_entity_active(EntityOrName const& ent) const;
     void     set_entity_active(EntityOrName const& ent, bool active);
 
-    std::string const&  debugging_info(EntityOrName const& ent) const;
-    void     set_entity_debugging_info(EntityOrName const& ent, std::string const& text);
+    std::optional<std::string> entity_debugging_info(EntityOrName const& ent) const;
+    void                       set_entity_debugging_info(EntityOrName const& ent, std::string const& text);
 
     void     remove_entity(EntityOrName const& ent);
 
@@ -159,15 +160,6 @@ private:
     
     // {{{ private
     
-    struct ConcreteEntity {
-        Entity entity;
-        bool   active;
-    };
-
-    std::vector<ConcreteEntity>   _entities = {};
-    ComponentTupleVector          _components = {};
-    std::map<std::string, Entity> _named_entities = {};
-
     Entity entity(EntityOrName const& ent) const {
         if (auto s = std::get_if<std::string>(&ent)) {
             try {
@@ -182,6 +174,16 @@ private:
             return entity;
         }
     }
+
+    struct ConcreteEntity {
+        Entity entity;
+        bool   active;
+    };
+
+    std::vector<ConcreteEntity>   _entities = {};
+    ComponentTupleVector          _components = {};
+    std::map<std::string, Entity> _named_entities = {};
+    std::map<Entity, std::string> _debugging_info = {};
 
     // }}}
 
@@ -230,6 +232,51 @@ Engine<System, Global, Event, Components...>::set_entity_active(EntityOrName con
             entity(ent), 
             [](ConcreteEntity const& ce, Entity const& e) { return ce.entity.get() < e.get(); }
         )->active = active;
+}
+
+template <typename System, typename Global, typename Event, typename... Components>
+std::optional<std::string>
+Engine<System, Global, Event, Components...>::entity_debugging_info(EntityOrName const& ent) const
+{
+    auto it = _debugging_info.find(entity(ent));
+    if (it == end(_debugging_info))
+        return {};
+    else
+        return it->second;
+}
+
+template <typename System, typename Global, typename Event, typename... Components>
+void
+Engine<System, Global, Event, Components...>::set_entity_debugging_info(EntityOrName const& ent, std::string const& text)
+{
+    _debugging_info[entity(ent)] = text;
+}
+
+template <typename System, typename Global, typename Event, typename... Components>
+void
+Engine<System, Global, Event, Components...>::remove_entity(EntityOrName const& ent)
+{
+    Entity id = entity(ent);
+
+    // remove from _entities
+    _entities.erase(std::remove_if(_entities.begin(), _entities.end(),
+                [&](ConcreteEntity const& ce) { return ce.entity == id; }), _entities.end());
+
+    // remove from _components
+    auto remove_component = [&](auto& t) {
+        t.erase(std::remove_if(t.begin(), t.end(), [&](auto const& p) { return p.first == id; }), t.end());
+    };
+    (remove_component(std::get<std::vector<std::pair<Entity, Components>>>(_components)), ...);
+
+    // remove from _named_entities
+    for (auto it = _named_entities.begin(); it != _named_entities.end(); )
+        if (it->second == id)
+            _named_entities.erase(it++);
+        else
+            ++it;
+
+    // remove from _debugging_info
+    _debugging_info.erase(id);
 }
 
 // 
