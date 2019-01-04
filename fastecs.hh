@@ -90,29 +90,38 @@ public:
 
     template <typename C>
     bool     has_component(EntityOrName const& ent) const {
+        // {{{ ...
         return component_ptr<C>(ent) != nullptr;
+        // }}}
     }
 
     template <typename C>
     C&       component(EntityOrName const& ent) {
+        // {{{ ...
         return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component<C>(ent));
+        // }}}
     }
 
     template <typename C>
     C const& component(EntityOrName const& ent) const {
+        // {{{ ...
         C const* c = component_ptr<C>(ent);
         if (c == nullptr)
             throw ECSError(std::string("Entity ") + std::to_string(entity(ent).get()) + " has no component '" + component_name<C>() + "'.");
         return *c;
+        // }}}
     }
 
     template <typename C>
     C*       component_ptr(EntityOrName const& ent) {
+        // {{{ ...
         return const_cast<C*>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component_ptr<C>(ent));
+        // }}}
     }
 
     template <typename C>
     C const* component_ptr(EntityOrName const& ent) const {
+        // {{{ ...
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -120,6 +129,7 @@ public:
         if (it != vec.end() && it->first == id)
             return &it->second;
         return nullptr;
+        // }}}
     }
 
     template <typename C>
