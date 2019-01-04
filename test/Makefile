@@ -9,6 +9,7 @@ endif
 
 all: test-fast-ecs example
 
+test-fast-ecs: CXXFLAGS += -DTEST
 test-fast-ecs: test.o
 	$(CXX) $(LDFLAGS) -o $@ $^
 

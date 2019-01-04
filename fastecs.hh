@@ -68,10 +68,25 @@ public:
     // components
 
     template <typename C>
-    C&       add_component(EntityOrName const& ent, C&& c);
+    C&       add_component(EntityOrName const& ent, C&& c) {
+        // {{{ ...
+        Entity id = entity(ent);
+        auto& vec = std::get<std::vector<std::pair<Entity, C>>>(_components);
+        auto it = std::lower_bound(begin(vec), end(vec), id,
+            [](auto const& p, Entity const& e) { return p.first < e; });
+
+        if (it != vec.end() && it->first == id)
+            throw ECSError(std::string("Component '") + component_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ".");
+        return vec.insert(it, { id, std::move(c) })->second;
+        // }}}
+    }
 
     template <typename C, typename... P>
-    C&       add_component(EntityOrName const& ent, P&& ...pars);
+    C&       add_component(EntityOrName const& ent, P&& ...pars) {
+        // {{{ ...
+        return add_component(ent, C { pars... });
+        // }}}
+    }
 
     template <typename C>
     bool     has_component(EntityOrName const& ent) const;
@@ -90,6 +105,22 @@ public:
 
     template <typename C>
     void     remove_component(EntityOrName const& ent);
+
+    template <typename C>
+    static std::string component_name() {
+        // {{{ ...
+        int status;
+        std::string tname = typeid(C).name();
+#ifndef NOABI
+        char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
+        if(status == 0) {
+            tname = demangled_name;
+            free(demangled_name);
+        }
+#endif
+        return tname;
+        // }}}
+    }
 
     // iteration
 
@@ -148,6 +179,23 @@ public:
     size_t event_queue_size() const;
     size_t memory_used() const;
 
+    // integrity
+
+    void verify_integrity() const;
+
+    // {{{ testable
+#ifdef TEST
+
+    template <typename C>
+    bool components_are_sorted() const {
+        auto& vec = std::get<std::vector<std::pair<Entity, C>>>(_components);
+        return std::is_sorted(vec.begin(), vec.end(), 
+                [](auto const& p1, auto const& p2) { return p1.first < p2.first; });
+    }
+
+#endif
+    // }}}
+
 private:
     // {{{ templates
     
@@ -161,18 +209,20 @@ private:
     // {{{ private
     
     Entity entity(EntityOrName const& ent) const {
+        // {{{ ...
         if (auto s = std::get_if<std::string>(&ent)) {
             try {
                 return _named_entities.at(*s);
             } catch (std::out_of_range&) {
-                throw ECSError("Entity '"s + *s + "' was not found.");
+                throw ECSError(std::string("Entity '") + *s + "' was not found.");
             }
         } else {
-            Entity entity = get<Entity>(ent);
-            if (find_if(begin(_entities), end(_entities), [&](ConcreteEntity const& ce) { return ce.entity == entity; }) == end(_entities))
-                throw ECSError("Entity "s + to_string(entity.get()) + " was not found.");
+            Entity entity = std::get<Entity>(ent);
+            if (std::find_if(begin(_entities), end(_entities), [&](ConcreteEntity const& ce) { return ce.entity == entity; }) == end(_entities))
+                throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
             return entity;
         }
+        // }}}
     }
 
     struct ConcreteEntity {
@@ -195,9 +245,11 @@ private:
 // ENTITIES
 //
 
-template <typename System, typename Global, typename Event, typename... Components>
-Entity
-Engine<System, Global, Event, Components...>::add_entity(std::optional<std::string> const& name)
+#define TEMPLATE template <typename System, typename Global, typename Event, typename... Components>
+#define ENGINE Engine<System, Global, Event, Components...>
+
+TEMPLATE Entity
+ENGINE::add_entity(std::optional<std::string> const& name)
 {
     if (_entities.empty()) {
         _entities.push_back({ Entity(0), true });
@@ -212,9 +264,8 @@ Engine<System, Global, Event, Components...>::add_entity(std::optional<std::stri
     return _entities.back().entity;
 }
 
-template <typename System, typename Global, typename Event, typename... Components>
-bool
-Engine<System, Global, Event, Components...>::is_entity_active(EntityOrName const& ent) const
+TEMPLATE bool
+ENGINE::is_entity_active(EntityOrName const& ent) const
 {
     return std::lower_bound(
             begin(_entities), end(_entities),
@@ -223,9 +274,8 @@ Engine<System, Global, Event, Components...>::is_entity_active(EntityOrName cons
         )->active;
 }
 
-template <typename System, typename Global, typename Event, typename... Components>
-void
-Engine<System, Global, Event, Components...>::set_entity_active(EntityOrName const& ent, bool active)
+TEMPLATE void
+ENGINE::set_entity_active(EntityOrName const& ent, bool active)
 {
     std::lower_bound(
             begin(_entities), end(_entities),
@@ -234,9 +284,8 @@ Engine<System, Global, Event, Components...>::set_entity_active(EntityOrName con
         )->active = active;
 }
 
-template <typename System, typename Global, typename Event, typename... Components>
-std::optional<std::string>
-Engine<System, Global, Event, Components...>::entity_debugging_info(EntityOrName const& ent) const
+TEMPLATE std::optional<std::string>
+ENGINE::entity_debugging_info(EntityOrName const& ent) const
 {
     auto it = _debugging_info.find(entity(ent));
     if (it == end(_debugging_info))
@@ -245,16 +294,14 @@ Engine<System, Global, Event, Components...>::entity_debugging_info(EntityOrName
         return it->second;
 }
 
-template <typename System, typename Global, typename Event, typename... Components>
-void
-Engine<System, Global, Event, Components...>::set_entity_debugging_info(EntityOrName const& ent, std::string const& text)
+TEMPLATE void
+ENGINE::set_entity_debugging_info(EntityOrName const& ent, std::string const& text)
 {
     _debugging_info[entity(ent)] = text;
 }
 
-template <typename System, typename Global, typename Event, typename... Components>
-void
-Engine<System, Global, Event, Components...>::remove_entity(EntityOrName const& ent)
+TEMPLATE void
+ENGINE::remove_entity(EntityOrName const& ent)
 {
     Entity id = entity(ent);
 
@@ -283,9 +330,8 @@ Engine<System, Global, Event, Components...>::remove_entity(EntityOrName const& 
 // INFO
 //
 
-template <typename System, typename Global, typename Event, typename... Components>
-size_t
-Engine<System, Global, Event, Components...>::number_of_entities() const 
+TEMPLATE size_t
+ENGINE::number_of_entities() const 
 {
     return _entities.size();
     /*
@@ -294,6 +340,9 @@ Engine<System, Global, Event, Components...>::number_of_entities() const
     return *std::max_element(begin(counts), end(counts));
     */
 }
+
+#undef TEMPLATE
+#undef ENGINE
 
 // }}}
 

@@ -4,9 +4,10 @@
 #include <string>
 #include <variant>
 #include <vector>
-using namespace std;
 
 #include "fastecs.hh"
+
+using namespace std;
 using namespace ecs;
 
 TEST_CASE("entities") {
@@ -43,6 +44,26 @@ TEST_CASE("entities") {
     CHECK_THROWS(e.set_entity_debugging_info(id, ""));
     CHECK_THROWS(e.entity_debugging_info(id));
     CHECK_THROWS(e.remove_entity(id));
+}
+
+TEST_CASE("components") {
+
+    struct A { int x; };
+    struct B { string y; };
+
+    Engine<NoSystem, NoGlobal, NoEventQueue, A, B> e;
+    Entity id = e.add_entity();
+
+    A& a = e.add_component<A>(id, 42);
+    CHECK_THROWS(e.add_component<A>(id, 43));
+    CHECK(a.x == 42);
+
+    Entity id2 = e.add_entity(),
+           id3 = e.add_entity();
+    CHECK(e.add_component<A>(id3, 44).x == 44);
+    CHECK(e.add_component<A>(id2, 43).x == 43);
+    CHECK(e.components_are_sorted<A>());
+
 }
 
 #if 0  // {{{
