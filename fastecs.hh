@@ -71,13 +71,13 @@ public:
     C&       add_component(EntityOrName const& ent, C&& c) {
         // {{{ ...
         Entity id = entity(ent);
-        auto& vec = std::get<std::vector<std::pair<Entity, C>>>(_components);
+        auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
             [](auto const& p, Entity const& e) { return p.first < e; });
 
         if (it != vec.end() && it->first == id)
             throw ECSError(std::string("Component '") + component_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ".");
-        return vec.insert(it, { id, std::move(c) })->second;
+        return vec.insert(it, { id, c })->second;
         // }}}
     }
 
@@ -89,19 +89,38 @@ public:
     }
 
     template <typename C>
-    bool     has_component(EntityOrName const& ent) const;
+    bool     has_component(EntityOrName const& ent) const {
+        return component_ptr<C>(ent) != nullptr;
+    }
 
     template <typename C>
-    C&       component(EntityOrName const& ent);
+    C&       component(EntityOrName const& ent) {
+        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component<C>(ent));
+    }
 
     template <typename C>
-    C const& component(EntityOrName const& ent) const;
+    C const& component(EntityOrName const& ent) const {
+        C const* c = component_ptr<C>(ent);
+        if (c == nullptr)
+            throw ECSError(std::string("Entity ") + std::to_string(entity(ent).get()) + " has no component '" + component_name<C>() + "'.");
+        return *c;
+    }
 
     template <typename C>
-    C*       component_ptr(EntityOrName const& ent);
+    C*       component_ptr(EntityOrName const& ent) {
+        return const_cast<C*>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component_ptr<C>(ent));
+    }
 
     template <typename C>
-    C const* component_ptr(EntityOrName const& ent) const;
+    C const* component_ptr(EntityOrName const& ent) const {
+        Entity id = entity(ent);
+        auto& vec = comp_vec<C>(_entities.at(id));
+        auto it = std::lower_bound(begin(vec), end(vec), id,
+            [](auto const& p, Entity const& e) { return p.first < e; });
+        if (it != vec.end() && it->first == id)
+            return &it->second;
+        return nullptr;
+    }
 
     template <typename C>
     void     remove_component(EntityOrName const& ent);
@@ -188,8 +207,11 @@ public:
 
     template <typename C>
     bool components_are_sorted() const {
-        auto& vec = std::get<std::vector<std::pair<Entity, C>>>(_components);
-        return std::is_sorted(vec.begin(), vec.end(), 
+        auto& vec1 = comp_vec<C>(true),
+              vec2 = comp_vec<C>(false);
+        return std::is_sorted(vec1.begin(), vec1.end(), 
+                [](auto const& p1, auto const& p2) { return p1.first < p2.first; })
+            && std::is_sorted(vec2.begin(), vec2.end(), 
                 [](auto const& p1, auto const& p2) { return p1.first < p2.first; });
     }
 
@@ -218,22 +240,30 @@ private:
             }
         } else {
             Entity entity = std::get<Entity>(ent);
-            if (std::find_if(begin(_entities), end(_entities), [&](ConcreteEntity const& ce) { return ce.entity == entity; }) == end(_entities))
+            if (_entities.find(entity) == _entities.end())
                 throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
             return entity;
         }
         // }}}
     }
 
-    struct ConcreteEntity {
-        Entity entity;
-        bool   active;
-    };
+    template <typename C>
+    std::vector<std::pair<Entity, C>>& comp_vec(bool active) {
+        return std::get<std::vector<std::pair<Entity, C>>>(active ? _components_active : _components_inactive);
+    }
 
-    std::vector<ConcreteEntity>   _entities = {};
-    ComponentTupleVector          _components = {};
-    std::map<std::string, Entity> _named_entities = {};
-    std::map<Entity, std::string> _debugging_info = {};
+    template <typename C>
+    std::vector<std::pair<Entity, C>> const& comp_vec(bool active) const {
+        return std::get<std::vector<std::pair<Entity, C>>>(active ? _components_active : _components_inactive);
+    }
+
+    std::map<Entity, bool>        _entities            = {};
+    ComponentTupleVector          _components_active   = {},
+                                  _components_inactive = {};
+    std::map<std::string, Entity> _named_entities      = {};
+    std::map<Entity, std::string> _debugging_info      = {};
+
+    size_t                        _next_entity_id      = 0;
 
     // }}}
 
@@ -251,37 +281,27 @@ private:
 TEMPLATE Entity
 ENGINE::add_entity(std::optional<std::string> const& name)
 {
-    if (_entities.empty()) {
-        _entities.push_back({ Entity(0), true });
-    } else {
-        size_t id = _entities.back().entity.get() + 1;
-        _entities.push_back({ Entity(id), true });
-    }
+    Entity ent { _next_entity_id++ };
+    _entities[ent] = true;
 
     if (name)
-        _named_entities.insert_or_assign(name.value(), _entities.back().entity);
+        _named_entities.insert_or_assign(name.value(), ent);
 
-    return _entities.back().entity;
+    return ent;
 }
 
 TEMPLATE bool
 ENGINE::is_entity_active(EntityOrName const& ent) const
 {
-    return std::lower_bound(
-            begin(_entities), end(_entities),
-            entity(ent), 
-            [](ConcreteEntity const& ce, Entity const& e) { return ce.entity.get() < e.get(); }
-        )->active;
+    return _entities.at(entity(ent));
 }
 
 TEMPLATE void
 ENGINE::set_entity_active(EntityOrName const& ent, bool active)
 {
-    std::lower_bound(
-            begin(_entities), end(_entities),
-            entity(ent), 
-            [](ConcreteEntity const& ce, Entity const& e) { return ce.entity.get() < e.get(); }
-        )->active = active;
+    _entities.at(entity(ent)) = active;
+
+    // TODO - move between component list
 }
 
 TEMPLATE std::optional<std::string>
@@ -306,21 +326,22 @@ ENGINE::remove_entity(EntityOrName const& ent)
     Entity id = entity(ent);
 
     // remove from _entities
-    _entities.erase(std::remove_if(_entities.begin(), _entities.end(),
-                [&](ConcreteEntity const& ce) { return ce.entity == id; }), _entities.end());
+    _entities.erase(id);
 
     // remove from _components
     auto remove_component = [&](auto& t) {
         t.erase(std::remove_if(t.begin(), t.end(), [&](auto const& p) { return p.first == id; }), t.end());
     };
-    (remove_component(std::get<std::vector<std::pair<Entity, Components>>>(_components)), ...);
+    (remove_component(comp_vec<Components>(true)), ...);
+    (remove_component(comp_vec<Components>(false)), ...);
 
     // remove from _named_entities
-    for (auto it = _named_entities.begin(); it != _named_entities.end(); )
+    for (auto it = _named_entities.begin(); it != _named_entities.end(); ) {
         if (it->second == id)
             _named_entities.erase(it++);
         else
             ++it;
+    }
 
     // remove from _debugging_info
     _debugging_info.erase(id);
