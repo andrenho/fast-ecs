@@ -1,9 +1,8 @@
 #
 # variables
 # 
-CXXFLAGS = --std=c++17 @warnings.txt -g -ggdb3 -O0 -fno-inline-functions -I.. -DDEBUG -DGTEST
+CXXFLAGS = --std=c++17 @warnings.txt -g -ggdb3 -O0 -fno-inline-functions -I.. -DDEBUG
 LDFLAGS = -g
-LDLIBS = -lgtest
 ifeq ($(CXX),g++)
   CXXFLAGS += -fno-inline-small-functions
 endif
@@ -11,10 +10,10 @@ endif
 all: test-fast-ecs example
 
 test-fast-ecs: test.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) $(LDFLAGS) -o $@ $^
 
 example: example.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) $(LDFLAGS) -o $@ $^
 
 test.o: test.cc ../fastecs.hh
 

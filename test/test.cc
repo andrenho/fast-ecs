@@ -1,4 +1,5 @@
-#include <gtest/gtest.h>
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include "doctest.h"
 
 #include <string>
 #include <variant>
@@ -6,6 +7,19 @@
 using namespace std;
 
 #include "fastecs.hh"
+using namespace ecs;
+
+TEST_CASE("entities") {
+
+    struct C {};
+    Engine<NoSystem, NoGlobal, NoEventQueue, C> e;
+
+    // simple entity
+    Entity id = e.add_entity();
+
+}
+
+#if 0  // {{{
 
 namespace ECS {
 
@@ -771,10 +785,6 @@ TEST_F(EngineLeakTest, Leak) {
 
 }  // namespace ECS
 
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
+#endif   // }}}
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker

@@ -1,6 +1,119 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#include <iostream>
+#include <optional>
+#include <string>
+#include <vector>
+
+#ifndef NOABI
+#  include <cxxabi.h>
+#endif
+
+#ifdef GTEST
+#  include <gtest/gtest_prod.h>
+#endif
+
+namespace ecs {
+
+struct NoSystem {};
+struct NoGlobal {};
+using  NoEventQueue = std::variant<int>;
+
+struct Entity {
+};
+
+template <typename System, typename Global, typename Event, typename... Components>
+class Engine {
+public:
+
+    // entities
+
+    Entity   add_entity(std::optional<std::string> const& name = {});
+    void     remove_entity(Entity const& ent);
+
+    void     set_entity_active(Entity const& ent, bool active);
+    void     set_entity_debugging_info(Entity const& ent, std::string const& text);
+
+    // components
+
+    template <typename C>
+    C&       add_component(Entity const& ent, C&& c);
+
+    template <typename C, typename... P>
+    C&       add_component(Entity const& ent, P&& ...pars);
+
+    template <typename C>
+    bool     has_component(Entity const& ent) const;
+
+    template <typename C>
+    C&       component(Entity const& ent);
+
+    template <typename C>
+    C const& component(Entity const& ent) const;
+
+    template <typename C>
+    C*       component_ptr(Entity const& ent);
+
+    template <typename C>
+    C const* component_ptr(Entity const& ent) const;
+
+    template <typename C>
+    void     remove_component(Entity const& ent);
+
+    // iteration
+
+    template<typename F, typename... C>
+    void     for_each(F user_function, bool include_inactive=false);
+
+    template<typename F, typename... C>
+    void     for_each(F user_function, bool include_inactive=false) const;
+
+    // systems
+    template <typename... P>
+    System&              add_system(P&& ...pars);
+    
+    template <typename S>
+    System const&        system() const;
+
+    std::vector<System*> systems() const;
+
+    template <typename S>
+    void                 remove_system();
+
+    // globals
+
+    Global&       global();
+    Global const& global() const;
+
+    // events
+
+    void           send_event(Event ev);
+
+    template <typename T>
+    std::vector<T> event_queue() const;
+
+    void           clear_event_queue();
+    
+    // debugging
+
+    void           debug_entity(std::ostream& os, Entity const& ent) const;
+
+    template <typename C>
+    void           debug_component(std::ostream& os, Entity const& ent) const;
+
+    void           debug_entities(std::ostream& os) const;
+    void           debug_systems(std::ostream& os) const;
+    void           debug_global(std::ostream& os) const;
+    void           debug_event_queue(std::ostream& os) const;
+
+    void           debug_all(std::ostream& os) const;
+};
+
+}
+
+#if 0  // {{{
+
 #include <algorithm>
 #include <csetjmp>
 #include <cstdint>
@@ -853,7 +966,10 @@ class RawData<entity_size_t, component_id_t, component_size_t> {
     std::vector<System*> _systems = {};
 };
 
+
 }  // namespace ECS
+
+#endif  // #if 0  // }}}
 
 #endif
 
