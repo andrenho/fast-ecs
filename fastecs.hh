@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <type_traits>
 #include <tuple>
 #include <stdexcept>
 #include <string>
@@ -27,7 +28,11 @@ public:
 
 struct NoSystem {};
 struct NoGlobal {};
-using  NoEventQueue = std::variant<>;
+using  NoEventQueue = std::variant<nullptr_t>;
+
+// TODO - Global must be default constructible
+// TODO - Event must be a variant
+// TODO - Components must be copiable
 
 struct Entity {
     size_t get()                          { return value; }
@@ -58,15 +63,15 @@ public:
     // entities
     //
 
-    Entity   add_entity(std::optional<std::string> const& name = {});
+    Entity                     add_entity(std::optional<std::string> const& name = {});
 
-    bool     is_entity_active(EntityOrName const& ent) const;
-    void     set_entity_active(EntityOrName const& ent, bool active);
+    bool                       is_entity_active(EntityOrName const& ent) const;
+    void                       set_entity_active(EntityOrName const& ent, bool active);
 
     std::optional<std::string> entity_debugging_info(EntityOrName const& ent) const;
     void                       set_entity_debugging_info(EntityOrName const& ent, std::string const& text);
 
-    void     remove_entity(EntityOrName const& ent);
+    void                       remove_entity(EntityOrName const& ent);
 
     //
     // components
@@ -81,7 +86,7 @@ public:
             [](auto const& p, Entity const& e) { return p.first < e; });
 
         if (it != vec.end() && it->first == id)
-            throw ECSError(std::string("Component '") + component_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ".");
+            throw ECSError(std::string("Component '") + type_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ".");
         return vec.insert(it, { id, c })->second;
         // }}}
     }
@@ -112,7 +117,7 @@ public:
         // {{{ ...
         C const* c = component_ptr<C>(ent);
         if (c == nullptr)
-            throw ECSError(std::string("Entity ") + std::to_string(entity(ent).get()) + " has no component '" + component_name<C>() + "'.");
+            throw ECSError(std::string("Entity ") + std::to_string(entity(ent).get()) + " has no component '" + type_name<C>() + "'.");
         return *c;
         // }}}
     }
@@ -147,23 +152,7 @@ public:
         if (it != vec.end() && it->first == id)
             vec.erase(it);
         else
-            throw ECSError(std::string("Entity ") + std::to_string(id.get()) + " has no component '" + component_name<C>() + "'.");
-        // }}}
-    }
-
-    template <typename C>
-    static std::string component_name() {
-        // {{{ ...
-        int status;
-        std::string tname = typeid(C).name();
-#ifndef NOABI
-        char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
-        if(status == 0) {
-            tname = demangled_name;
-            free(demangled_name);
-        }
-#endif
-        return tname;
+            throw ECSError(std::string("Entity ") + std::to_string(id.get()) + " has no component '" + type_name<C>() + "'.");
         // }}}
     }
 
@@ -171,11 +160,13 @@ public:
     // iteration
     //
 
+    // {{{ type aliases
     template <typename C>
     using my_iter = typename std::vector<std::pair<Entity, C>>::iterator;
 
     template <typename C>
     using my_citer = typename std::vector<std::pair<Entity, C>>::const_iterator;
+    // }}}
 
     template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) {
@@ -253,7 +244,8 @@ public:
     // systems
     //
 
-    template<typename S, typename... P> S& add_system(P&& ...pars) {
+    template<typename S, typename... P> S&      add_system(P&& ...pars) {
+        // {{{ ...
         for(auto& sys: _systems) {
             S const* s = dynamic_cast<S const*>(sys.get());
             if(s)
@@ -261,12 +253,11 @@ public:
         }
         _systems.push_back(std::make_shared<S>(pars...));
         return *static_cast<S*>(_systems.back().get());
+        // }}}
     }
 
-    template <typename S>
-    System&              add_system(S&& s);  // TODO
-    
-    template<typename S> S const& system() const {
+    template<typename S> S const&               system() const {
+        // {{{
         for(auto& sys: _systems) {
             S const* s = dynamic_cast<S const*>(sys.get());
             if(s) {
@@ -274,46 +265,86 @@ public:
             }
         }
         throw std::runtime_error("System not found.");
+        // }}}
     }
 
     std::vector<std::shared_ptr<System>> const& systems() const { return _systems; }
 
     template <typename S>
-    void                 remove_system();
+    void                                        remove_system() {
+        // {{{
+        for (auto it = _systems.begin(); it != _systems.end(); ) {
+            S const* s = dynamic_cast<S const*>(it->get());
+            if (s)
+                it = _systems.erase(it);
+            else
+                ++it;
+        }
+        
+        // }}}
+    }
 
     // 
     // globals
     //
 
-    Global&       global();
-    Global const& global() const;
+    Global&       global()                  { return _global; }
+    Global const& global() const            { return _global; }
 
     //
     // events
     //
 
-    void           send_event(Event ev);
+
+    void           send_event(Event&& ev)   { _events.push_back(std::move(ev)); }
 
     template <typename T>
-    std::vector<T> event_queue() const;
+    std::vector<T> event_queue() const {
+        // {{{ ...
+        std::vector<T> r;
+        for (auto ev : _events)
+            if (std::holds_alternative<T>(ev))
+                r.push_back(std::get<T>(ev));
+        return r;
+        // }}}
+    }
 
-    void           clear_event_queue();
+    void           clear_queue()            { _events.clear(); }
     
     //
     // debugging
     //
 
-    void           debug_entity(std::ostream& os, EntityOrName const& ent) const;
+    template <typename C>
+    static std::string type_name() {
+        // {{{ ...
+        int status;
+        std::string tname = typeid(C).name();
+#ifndef NOABI
+        char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
+        if(status == 0) {
+            tname = demangled_name;
+            free(demangled_name);
+        }
+#endif
+        return tname;
+        // }}}
+    }
 
     template <typename C>
-    void           debug_component(std::ostream& os, EntityOrName const& ent) const;
+    std::ostream& debug_component(std::ostream& os, EntityOrName const& ent) const {
+        // TODO
+        return os;
+    }
 
-    void           debug_entities(std::ostream& os) const;
-    void           debug_systems(std::ostream& os) const;
-    void           debug_global(std::ostream& os) const;
-    void           debug_event_queue(std::ostream& os) const;
+    std::ostream& debug_entity(std::ostream& os, EntityOrName const& ent) const;
 
-    void           debug_all(std::ostream& os) const;
+    std::ostream& debug_entities(std::ostream& os) const;
+    std::ostream& debug_systems(std::ostream& os) const;
+    std::ostream& debug_global(std::ostream& os) const;
+    std::ostream& debug_event_queue(std::ostream& os) const;
+
+    void debug_all(std::ostream& os) const;
 
     //
     // information
@@ -349,9 +380,23 @@ private:
     using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
     static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
 
+    // check if class has operator<<
+    template<typename T>
+    struct has_ostream_method
+    {
+    private:
+        typedef std::true_type  yes;
+        typedef std::false_type no;
+
+        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
+        template<typename> static no test(...);
+    public:
+        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
+    };
+
     // }}}
     
-    // {{{ private
+    // {{{ private methods
     
     Entity entity(EntityOrName const& ent) const {
         // {{{ ...
@@ -396,20 +441,26 @@ private:
         auto it_dest = std::lower_bound(begin(dest), end(dest), id,
             [](auto const& p, Entity const& e) { return p.first < e; });
         if (it_dest != dest.end() && it_dest->first == id)  // shouldn't happen
-            throw std::logic_error(std::string("Component '") + component_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ". This is an internal ecs error.");
+            throw std::logic_error(std::string("Component '") + type_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ". This is an internal ecs error.");
 
         dest.insert(it_dest, std::move(*it_origin));
         origin.erase(it_origin);
         // }}}
     }
 
-    std::map<Entity, bool>               _entities            = {};
-    ComponentTupleVector                 _components_active   = {},
-                                         _components_inactive = {};
-    std::map<std::string, Entity>        _named_entities      = {};
-    std::map<Entity, std::string>        _debugging_info      = {};
+    // }}}
 
-    std::vector<std::shared_ptr<System>> _systems = {};
+    // {{{ private members
+
+    std::map<Entity, bool>               _entities            {};
+    ComponentTupleVector                 _components_active   {},
+                                         _components_inactive {};
+    std::map<std::string, Entity>        _named_entities      {};
+    std::map<Entity, std::string>        _debugging_info      {};
+
+    std::vector<std::shared_ptr<System>> _systems             {};
+    Global                               _global              {};
+    std::vector<Event>                   _events              {};
 
     size_t                               _next_entity_id      = 0;
 
@@ -498,6 +549,7 @@ ENGINE::remove_entity(EntityOrName const& ent)
     // remove from _debugging_info
     _debugging_info.erase(id);
 }
+
 
 // 
 // INFO

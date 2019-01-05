@@ -217,6 +217,7 @@ TEST_CASE("engine copyable") {
 }
 
 TEST_CASE("systems") {
+    // {{{ ...
     class System {
     public:
         virtual ~System() {}
@@ -238,6 +239,58 @@ TEST_CASE("systems") {
         CHECK(e.systems().size() == 1); 
         CHECK_THROWS(e.add_system<TestSystem>(2));
     }
+    
+    SUBCASE("remove system") {
+        e.remove_system<TestSystem>();
+        CHECK(e.systems().size() == 0); 
+        CHECK_NOTHROW(e.add_system<TestSystem>(2));
+    }
+
+    // }}}
+}
+
+TEST_CASE("global") {
+    // {{{ ...
+
+    struct Global {
+        int x = 42;
+    };
+
+    struct C {};
+    using MyEngine = Engine<NoSystem, Global, NoEventQueue, C>;
+    MyEngine e;
+
+    CHECK(e.global().x == 42);
+    e.global().x = 24;
+    CHECK(e.global().x == 24);
+
+    // }}}
+}
+
+TEST_CASE("events") {
+    // {{{ ...
+
+    struct EventTypeA { size_t id; };
+    struct EventTypeB { string abc; };
+    using Event = variant<EventTypeA, EventTypeB>;
+
+    struct C {};
+    using MyEngine = Engine<NoSystem, NoGlobal, Event, C>;
+    MyEngine e;
+
+    e.send_event(EventTypeA { 12 });
+    e.send_event(EventTypeA { 24 });
+    e.send_event(EventTypeB { "Hello" });
+    CHECK(e.event_queue<EventTypeA>().size() == 2);
+    CHECK(e.event_queue<EventTypeA>().at(0).id == 12);
+    CHECK(e.event_queue<EventTypeA>().at(1).id == 24);
+    CHECK(e.event_queue<EventTypeA>().at(1).id == 24);
+    CHECK(e.event_queue<EventTypeB>().at(0).abc == "Hello");
+    e.clear_queue();
+    CHECK(e.event_queue<EventTypeA>().empty());
+    CHECK(e.event_queue<EventTypeB>().empty());
+
+    // }}}
 }
 
 #if 0  // {{{
