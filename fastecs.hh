@@ -28,11 +28,7 @@ public:
 
 struct NoSystem {};
 struct NoGlobal {};
-using  NoEventQueue = std::variant<nullptr_t>;
-
-// TODO - Global must be default constructible
-// TODO - Event must be a variant
-// TODO - Components must be copiable
+using  NoEventQueue = std::variant<std::nullptr_t>;
 
 struct Entity {
     size_t get()                          { return value; }
@@ -334,11 +330,9 @@ public:
     template <typename C>
     std::string debug_component(EntityOrName const& ent) const { return "{ " + debug_object<C>(component<C>(ent)) + "}"; }
 
-    std::string debug_entity(EntityOrName const& ent) const;
-    std::string debug_entities(bool include_inactive=false) const;
-    std::string debug_systems() const;
+    std::string debug_entity(EntityOrName const& ent, size_t spaces=0) const;
+    std::string debug_entities(bool include_inactive=false, size_t spaces=0) const;
     std::string debug_global() const;
-    std::string debug_event_queue() const;
 
     std::string debug_all(bool include_inactive=false) const;
 
@@ -348,7 +342,7 @@ public:
 
     size_t number_of_entities() const;
     size_t number_of_components() const;
-    size_t number_of_events() const;
+    size_t number_of_event_types() const;
     size_t number_of_systems() const;
     size_t event_queue_size() const;
 
@@ -369,12 +363,24 @@ public:
     // }}}
 
 private:
-    // {{{ templates
+    // {{{ templates & static assertions
     
     // create a tuple from the component list
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-value"
+
     using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
     static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
+
+    static_assert(std::is_default_constructible<Global>::value, "Global must be default constructible.");
+    static_assert((std::is_copy_constructible<Components>::value, ...), "All components must be copyable.");
+
+    template <typename>      struct is_std_variant : std::false_type {};
+    template <typename... T> struct is_std_variant<std::variant<T...>> : std::true_type {};
+    static_assert(is_std_variant<Event>::value, "Event must be a std::variant<...>.");
+
+#pragma GCC diagnostic pop
 
     // check if class has operator<<
     template<typename T>
@@ -448,13 +454,12 @@ private:
     std::string debug_object(Obj const& obj) const {
         // {{{ ...
         // TODO - use ['...'] when there is an invalid character
-        std::string s = type_name<Obj>() + " = ";
+        std::stringstream ss;
+        ss << type_name<Obj>() << " = {";
         if constexpr(has_ostream_method<Obj>::value)
-            s += obj;
-        else
-            s += "{}";
-        s += ", ";
-        return s;
+            ss << " " << obj << " ";
+        ss << "}, ";
+        return ss.str();
         // }}}
     }
 
@@ -564,15 +569,15 @@ ENGINE::remove_entity(EntityOrName const& ent)
 // DEBUGGING
 //
 TEMPLATE std::string
-ENGINE::debug_entity(EntityOrName const& ent) const
+ENGINE::debug_entity(EntityOrName const& ent, size_t spaces) const
 {
-    std::string s = "{ ";
+    std::string s = std::string(spaces, ' ') + "{ ";
     ((s += has_component<Components>(ent) ? debug_object<Components>(component<Components>(ent)) : ""), ...);
     return s + "}";
 }
 
 TEMPLATE std::string
-ENGINE::debug_entities(bool include_inactive) const
+ENGINE::debug_entities(bool include_inactive, size_t spaces) const
 {
     std::vector<Entity> ents;
     for (auto const& [ent, active] : _entities) {
@@ -583,31 +588,36 @@ ENGINE::debug_entities(bool include_inactive) const
 
     std::string s = "{\n";
     for (auto const& ent : ents) {
-        s += std::string("   [");
-        s += std::to_string(ent.get());    // TODO - add name
+        auto it = _debugging_info.find(ent);
+        if (it != _debugging_info.end())
+            s += std::string(spaces, ' ') + std::string("   -- ") + it->second + "\n";
+        s += std::string(spaces, ' ') + std::string("   [");
+        for (auto const& [name, entity] : _named_entities) {
+            if (entity == ent) {
+                s += "{" + std::to_string(ent.get()) + ", '" + name + "'}";
+                goto skip;
+            }
+        }
+        s += std::to_string(ent.get());
+skip:
         s += "] = " + debug_entity(ent) + ",\n";
     }
-    return s + "}";
-}
-
-TEMPLATE std::string
-ENGINE::debug_systems() const
-{
+    return s + std::string(spaces, ' ') + "}";
 }
 
 TEMPLATE std::string
 ENGINE::debug_global() const
 {
-}
-
-TEMPLATE std::string
-ENGINE::debug_event_queue() const
-{
+    std::stringstream ss;
+    ss << "{ " << global() << " }";
+    return ss.str();
 }
 
 TEMPLATE std::string
 ENGINE::debug_all(bool include_inactive) const
 {
+    return std::string("{\n   global = ") + debug_global() + ",\n"
+        "   entities = " + debug_entities(include_inactive, 3) + "\n}";
 }
 
 
@@ -619,11 +629,32 @@ TEMPLATE size_t
 ENGINE::number_of_entities() const 
 {
     return _entities.size();
-    /*
-    std::vector<size_t> counts;
-    (counts.push_back(std::get<std::vector<std::pair<Entity, Components>>>(_components).size()), ...);
-    return *std::max_element(begin(counts), end(counts));
-    */
+}
+
+TEMPLATE size_t
+ENGINE::number_of_components() const
+{
+    return std::tuple_size<ComponentTupleVector>::value;
+}
+
+TEMPLATE size_t
+ENGINE::number_of_event_types() const
+{
+    if constexpr (std::is_same<Event, NoEventQueue>::value)
+        return 0;
+    return std::variant_size_v<Event>;
+}
+
+TEMPLATE size_t
+ENGINE::number_of_systems() const
+{
+    return _systems.size();
+}
+
+TEMPLATE size_t
+ENGINE::event_queue_size() const
+{
+    return _events.size();
 }
 
 #undef TEMPLATE
@@ -632,865 +663,6 @@ ENGINE::number_of_entities() const
 // }}}
 
 }
-
-#if 0  // {{{   old implementation
-
-#include <algorithm>
-#include <csetjmp>
-#include <cstdint>
-#include <cstdlib>
-#include <cstring>
-#include <functional>
-#include <iostream>
-#include <limits>
-#include <map>
-#include <new>
-#include <stdexcept>
-#include <tuple>
-#include <type_traits>
-#include <variant>
-#include <vector>
-
-#ifndef NOABI
-#  include <cxxabi.h>
-#endif
-
-#ifdef GTEST
-#  include <gtest/gtest_prod.h>
-#endif
-
-namespace ECS {
-
-// {{{ EXCEPTIONS
-
-class ECSError : public std::runtime_error {
-public:
-    explicit ECSError(std::string const& what_arg) : runtime_error(what_arg) {}
-    explicit ECSError(const char* what_arg)        : runtime_error(what_arg) {}
-};
-
-// }}}
-
-using NoQueue = std::variant<int>;
-using NoSystem = void;
-struct NoGlobal {};
-
-template<
-    typename System,
-    typename Global,
-    typename Event,
-    typename... Components>
-class Engine {
-public:
-    ~Engine() {
-        // call destructor for each component of each entity
-        _rd.for_each_entity([&](size_t, uint8_t* entity_ptr) {
-            _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component* c, uint8_t* data, entity_size_t) {
-                _destructors[c->id](data);
-                return false;
-            });
-            return false;
-        });
-        // clear systems
-        for(auto it = _systems.rbegin(); it != _systems.rend(); ++it) { delete *it; }
-    }
-
-    // 
-    // ENTITIES
-    //
-public:
-    size_t add_entity() {
-        return _rd.add_entity(); 
-    }
-
-    size_t add_entity(std::string const& id) {
-        size_t n = add_entity();
-        _entities[id] = n;
-        return n;
-    }
-
-    size_t entity(std::string const& id) const {
-        auto it = _entities.find(id);
-        if (it == _entities.end())
-            throw ECSError("Entity id '" + id + "' not found.");
-        return it->second;
-    }
-
-    std::string const& entity_name(size_t id) const {
-        for (auto const& [k, v] : _entities)
-            if (v == id)
-                return k;
-        throw ECSError("Entity id " + std::to_string(id) + " not found.");
-    }
-
-    void remove_entity(size_t entity) {
-        // call destructor for each component
-        _rd.for_each_component_in_entity(_rd.entity_ptr(entity), [&](typename decltype(_rd)::Component* c, uint8_t* data, entity_size_t) {
-            _destructors[c->id](data);
-            return false;
-        });
-        // remove from entity list
-        for (auto it = std::begin(_entities); it != std::end(_entities); ) {
-            if (it->second == entity)
-                _entities.erase(it++);
-            else
-                ++it;
-        }
-        // invalidate entity
-        _rd.invalidate_entity(entity);
-    }
-
-    void remove_entity(std::string const& id) {
-        remove_entity(entity(id));
-    }
-
-private:
-    std::map<std::string, size_t> _entities {};
-
-    //
-    // COMPONENTS
-    //
-private:
-    template<typename C>
-    C* allocate_component(size_t ent) {
-        if(has_component<C>(ent)) {
-            throw ECSError("Component already exists in entity.");
-        }
-        component_id_t id = component_id<C>();
-        // allocate space for the component, then initialize it
-        return reinterpret_cast<C*>(_rd.add_empty_component(ent, sizeof(C), id));
-    }
-
-public:
-    template <typename C>
-    void add_component(size_t ent, C c) {
-        new(allocate_component<C>(ent)) C(std::move(c));
-    }
-
-    template <typename C>
-    void add_component(std::string const& ent, C c) {
-        new(allocate_component<C>(ent)) C(std::move(c));
-    }
-
-    template<typename C, typename... P> 
-    void add_component(size_t ent, P&& ...pars) {
-        new(allocate_component<C>(ent)) C(pars...);
-    }
-
-    template<typename C, typename... P> 
-    void add_component(std::string const& ent, P&& ...pars) {
-        new(allocate_component<C>(entity(ent))) C(pars...);
-    }
-
-    template<typename C>
-    C const& component(size_t ent) const {
-        C const* component = component_ptr<C>(ent);
-        if(component == nullptr) {
-            throw ECSError("Entity does not contain this component.");
-        }
-        return *component;
-    }
-
-    template<typename C>
-    C const& component(std::string const& ent) const {
-        return component<C>(entity(ent));
-    }
-
-    template<typename C>
-    C& component(size_t ent) {
-        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component<C>(ent));
-    }
-
-    template<typename C>
-    C& component(std::string const& ent) {
-        return component<C>(entity(ent));
-    }
-
-    template<typename C>
-    C const* component_ptr(size_t ent) const {
-        void const* cdata = nullptr;
-        _rd.for_each_component_in_entity(_rd.entity_ptr(ent), [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
-            if(c->id == component_id<C>()) {
-                cdata = data;
-                return true;
-            }
-            return false;
-        });
-        if(!cdata) {
-            return nullptr;
-        }
-        return reinterpret_cast<C const*>(cdata);
-    }
-
-    template<typename C>
-    C const* component_ptr(std::string const& ent) const {
-        return component_ptr<C>(entity(ent));
-    }
-
-    template<typename C>
-    C* component_ptr(size_t ent) {
-        return const_cast<C*>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->component_ptr<C>(ent));
-    }
-
-    template<typename C>
-    C* component_ptr(std::string const& ent) {
-        return component_ptr<C>(entity(ent));
-    }
-
-    template<typename C>
-    bool has_component(size_t ent) const
-    {
-        bool has = false;
-        _rd.for_each_component_in_entity(_rd.entity_ptr(ent), [&](typename decltype(_rd)::Component const* c, uint8_t const*, entity_size_t) {
-            if(c->id == component_id<C>()) {
-                has = true;
-                return true;
-            }
-            return false;
-        });
-        return has;
-    }
-
-    template<typename C>
-    bool has_component(std::string const& ent) const
-    {
-        return has_component<C>(entity(ent));
-    }
-
-    template<typename C>
-    void remove_component(size_t ent) {
-        _rd.invalidate_component(ent, component_id<C>(), [](void* data) { 
-            reinterpret_cast<C*>(data)->~C();
-        });
-    }
-
-    template<typename C>
-    void remove_component(std::string const& ent) {
-        return remove_component(entity(ent));
-    }
-
-    // 
-    // MANAGEMENT
-    //
-    void compress() { 
-        _rd.compress(); 
-    }
-
-    //
-    // ITERATION
-    //
-    template<typename... C, typename F>
-    void for_each(F const& user_function) const {
-
-        _rd.for_each_entity([&](size_t entity, uint8_t const* entity_ptr) {
-
-            // Here, we prepare for a longjmp. If the component C is not found
-            // when for_each_parameter is called, it calls longjmp, which skips
-            // calling the user function.
-            jmp_buf env_buffer;
-            int val = setjmp(env_buffer);
-
-            // Call the user function. `val` is 0 when the component is found.
-            if(val == 0) {
-                user_function(entity, for_each_parameter<C>(entity_ptr, env_buffer)...);
-            }
-
-            return false;
-        });
-    }
-
-    template<typename... C, typename F>
-    void for_each(F const& user_function) {
-
-        _rd.for_each_entity([&](size_t entity, uint8_t* entity_ptr) {
-
-            // Here, we prepare for a longjmp. If the component C is not found
-            // when for_each_parameter is called, it calls longjmp, which skips
-            // calling the user function.
-            jmp_buf env_buffer;
-            int val = setjmp(env_buffer);
-
-            // Call the user function. `val` is 0 when the component is found.
-            if(val == 0) {
-                user_function(entity, for_each_parameter<C>(entity_ptr, env_buffer)...);
-            }
-
-            return false;
-        });
-    }
-
-private:
-    template<typename C> C const& for_each_parameter(uint8_t const* entity_ptr, jmp_buf env_buffer) const {
-        void const* cdata = nullptr;
-        _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
-            if(c->id == component_id<C>()) {
-                cdata = data;
-                return true;
-            }
-            return false;
-        });
-        if(!cdata) {
-            longjmp(env_buffer, 1);
-        }
-        return *reinterpret_cast<C const*>(cdata);
-    }
-
-    template<typename C> C& for_each_parameter(uint8_t const* entity_ptr, jmp_buf env_buffer) {
-        return const_cast<C&>(static_cast<const Engine<System, Global, Event, Components...>*>(this)->for_each_parameter<C>(entity_ptr, env_buffer));
-    }
-public:
-
-    //
-    // SYSTEMS
-    //
-    template<typename S, typename... P> S& add_system(P&& ...pars) {
-        _systems.push_back(new S(pars...));
-        return *static_cast<S*>(_systems.back());
-    }
-
-    template<typename S> S const& system() const {
-        for(auto& sys: _systems) {
-            S const* s = dynamic_cast<S const*>(sys);
-            if(s) {
-                return *s;
-            }
-        }
-        throw std::runtime_error("System not found.");
-    }
-
-    std::vector<System*> const& systems() const { return _systems; }
-
-    //
-    // QUEUE
-    //
-public:
-    void send(Event ev) { _events.push_back(std::move(ev)); }
-
-    template <typename T>
-    std::vector<T> events() const {
-        std::vector<T> r;
-        for (auto ev : _events)
-            if (std::holds_alternative<T>(ev))
-                r.push_back(std::get<T>(ev));
-        return r;
-    }
-
-    void clear_queue() { _events.clear(); }
-
-private:
-    std::vector<Event> _events {};
-
-    //
-    // GLOBALS
-    //
-public:
-    Global&       global() { return _global; }
-    Global const& global() const { return _global; }
-
-private:
-    Global _global {};
-
-    //
-    // DEBUGGING
-    //
-private:
-    // check if class has operator<<
-    template<typename T>
-    struct has_ostream_method
-    {
-    private:
-        typedef std::true_type  yes;
-        typedef std::false_type no;
-
-        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
-        template<typename> static no test(...);
-    public:
-        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
-    };
-
-public:
-    void examine(std::ostream& os, size_t entity = std::numeric_limits<size_t>::max()) const {
-        auto examine_entity = [&](size_t entity, uint8_t const* entity_ptr) {
-            os << "  '" << entity << "': {\n";
-            bool first = true;
-            for (auto const& [name, id] : _entities) {
-                if (id == entity) {
-                    if (first) {
-                        os << "    'names' : [ ";
-                        first = false;
-                    }
-                    os << "'" << name << "', ";
-                }
-            }
-            if (!first)
-                os << "]\n";
-            _rd.for_each_component_in_entity(entity_ptr, [&](typename decltype(_rd)::Component const* c, uint8_t const* data, entity_size_t) {
-                os << "    ";
-                _debuggers[c->id](os, data);
-                os << ",\n";
-                return false;
-            });
-            os << "  },\n";
-            return false;
-        };
-        os << "{\n";
-        if(entity == std::numeric_limits<size_t>::max()) {
-            examine_global(os);
-            _rd.for_each_entity(examine_entity);
-        } else {
-            examine_entity(entity, _rd.entity_ptr(entity));
-        }
-        os << "}\n";
-    }
-
-    void examine(std::ostream& os, std::string const& ent) const {
-        examine(os, entity(ent));
-    }
-
-    // execute operator<< of global (with and without)
-    template<typename T=Global, typename std::enable_if<has_ostream_method<T>::value>::type* = nullptr>
-    void examine_global(std::ostream& os) const {
-        os << "  'global': {\n    " << global() << "\n  },\n";
-    }
-
-    template<typename T=Global, typename std::enable_if<!has_ostream_method<T>::value>::type* = nullptr>
-    void examine_global(std::ostream& os) const {
-        (void) os;
-    }
-
-#ifndef GTEST
-private:
-#endif
-    // {{{ RAW DATA INTERFACE
-
-    template<typename entity_size_t, typename component_id_t, typename component_size_t>
-    class RawData {
-
-        static_assert(std::is_signed<entity_size_t>::value, "Entity size type must be signed.");
-        static_assert(std::is_unsigned<component_id_t>::value, "Component ID type must be unsigned.");
-        static_assert(std::is_unsigned<component_size_t>::value, "Component size type must be signed.");
-
-    public:
-        RawData() {
-            // _ary.reserve(64 * 1024);
-        }
-
-        struct Entity {
-            entity_size_t sz;
-            void*         data;
-        };
-
-        struct Component {
-            component_size_t sz;
-            component_id_t   id;
-        };
-
-        static constexpr size_t         INVALIDATED_ENTITY    = std::numeric_limits<size_t>::max();
-        static constexpr component_id_t INVALIDATED_COMPONENT = std::numeric_limits<component_id_t>::max();
-
-        size_t add_entity() {
-            // insert index in _entities
-            _entities.push_back(_ary.size());
-            // insert size in _ary
-            entity_size_t sz = static_cast<entity_size_t>(sizeof(entity_size_t));
-            _ary_append_bytes(&sz, sz, -1);
-            return _entities.size()-1;
-        }
-
-        bool is_entity_valid(size_t entity) const {
-            return entity_size(entity) >= 0;
-        }
-
-        entity_size_t entity_size(size_t entity) const {
-            return *reinterpret_cast<entity_size_t const*>(&_ary[_entities[entity]]);
-        }
-
-        uint8_t const* entity_ptr(size_t entity) const {
-            if(entity > _entities.size()) {
-                throw ECSError("Entity does not exist.");
-            }
-            size_t idx = _entities[entity];
-            if(idx == INVALIDATED_ENTITY) {
-                throw ECSError("Entity was removed.");
-            }
-            return &_ary[idx];
-        }
-
-        uint8_t* entity_ptr(size_t entity) {
-            return const_cast<uint8_t*>(static_cast<const Engine<System, Global, Event, Components...>::RawData<entity_size_t, component_id_t, component_size_t>*>(this)->entity_ptr(entity));
-        }
-
-        void invalidate_entity(size_t entity) {
-            // IMPORTANT: this doesn't call the destructor for the entities
-            entity_size_t* entity_sz = reinterpret_cast<entity_size_t*>(&_ary[_entities[entity]]);
-            memset(&_ary[_entities[entity] + sizeof(entity_size_t)], 0xFF, *entity_sz - sizeof(entity_size_t));
-            *entity_sz = static_cast<entity_size_t>(-(*entity_sz));
-            _entities[entity] = INVALIDATED_ENTITY;
-        }
-
-        void* add_empty_component(size_t entity, component_size_t sz, component_id_t id) {
-            // create component
-            Component component { sz, id };
-            size_t idx = _find_space_for_component(entity, sizeof(Component) + sz);
-            _ary_copy_bytes(&component, sizeof(Component), idx);
-            return &_ary[idx + sizeof(Component)];
-        }
-
-        void add_component(size_t entity, component_size_t sz, component_id_t id, void* data) {
-            memcpy(add_empty_component(entity, sz, id), data, sz);
-        }
-
-        template<typename F>
-        void for_each_entity(F const& f, bool skip_invalid = true) {
-            if(_ary.empty()) {
-                return;
-            }
-            size_t entity = 0;
-            uint8_t *entity_ptr = &_ary[0],
-                    *entity_end = &_ary[0] + _ary.size();
-            while(entity_ptr < entity_end) {
-                entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
-                
-                if((skip_invalid && entity_sz >= 0) || !skip_invalid) {
-                    bool stop = f(entity, entity_ptr);
-                    if(stop) {
-                        return;
-                    }
-                }
-                
-                entity_ptr += abs(entity_sz);
-                ++entity;
-            }
-        }
-
-        template<typename F>
-        void for_each_entity(F const& f, bool skip_invalid = true) const {
-            if(_ary.empty()) {
-                return;
-            }
-            size_t entity = 0;
-            uint8_t const* entity_ptr = &_ary[0],
-                    *entity_end = &_ary[0] + _ary.size();
-            while(entity_ptr < entity_end) {
-                entity_size_t entity_sz = *reinterpret_cast<entity_size_t const*>(entity_ptr);
-                
-                if((skip_invalid && entity_sz >= 0) || !skip_invalid) {
-                    bool stop = f(entity, entity_ptr);
-                    if(stop) {
-                        return;
-                    }
-                }
-                
-                entity_ptr += abs(entity_sz);
-                ++entity;
-            }
-        }
-
-        // TODO - const version
-        template<typename F>
-        void for_each_component_in_entity(uint8_t* entity_ptr, F const& f, bool skip_invalid = true) {
-            entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
-            if(entity_sz < 0) {
-                throw ECSError("Using a removed entity");
-            }
-            uint8_t* initial_entity_ptr = entity_ptr;
-            uint8_t* end = entity_ptr + entity_sz;
-            entity_ptr += sizeof(entity_size_t);
-            while(entity_ptr < end) {
-                Component* component = reinterpret_cast<Component*>(entity_ptr);
-                if((skip_invalid && component->id != INVALIDATED_COMPONENT) || !skip_invalid) {
-                    if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
-                        return;
-                    }
-                }
-                entity_ptr += component->sz + sizeof(Component);
-            }
-        }
-
-        template<typename F>
-        void for_each_component_in_entity(uint8_t const* entity_ptr, F const& f, bool skip_invalid = true) const {
-            entity_size_t entity_sz = *reinterpret_cast<entity_size_t const*>(entity_ptr);
-            if(entity_sz < 0) {
-                throw ECSError("Using a removed entity");
-            }
-            uint8_t const* initial_entity_ptr = entity_ptr;
-            uint8_t const* end = entity_ptr + entity_sz;
-            entity_ptr += sizeof(entity_size_t);
-            while(entity_ptr < end) {
-                Component const* component = reinterpret_cast<Component const*>(entity_ptr);
-                if((skip_invalid && component->id != INVALIDATED_COMPONENT) || !skip_invalid) {
-                    if(f(component, entity_ptr + sizeof(Component), static_cast<entity_size_t>(entity_ptr - initial_entity_ptr))) {
-                        return;
-                    }
-                }
-                entity_ptr += component->sz + sizeof(Component);
-            }
-        }
-
-        template<typename F>
-        void invalidate_component(size_t entity, component_id_t id, F const& destructor) {
-            uint8_t* entity_ptr = &_ary[_entities[entity]];
-
-            entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
-            if(entity_sz < 0) {
-                throw ECSError("Using a removed entity");
-            }
-
-            bool found = false;
-            for_each_component_in_entity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
-                if(id == component->id) {
-                    destructor(data);
-                    component->id = INVALIDATED_COMPONENT;
-                    found = true;
-                    return true;  // stop searching
-                }
-                return false;
-            });
-
-            if(!found) {
-                throw ECSError("No such component to remove.");
-            }
-        }
-
-        void compress() {
-            std::vector<uint8_t> newary = {};
-            newary.reserve(_ary.size());   // avoids multiple resizing - we shrink it later
-
-            for_each_entity([&](size_t entity, uint8_t* entity_ptr) {
-                entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(entity_ptr);
-                size_t current_newary = newary.size();
-                // if entity is not invalidated, add it to the new ary
-                if(entity_sz >= 0) {
-                    entity_size_t current_sz = sizeof(entity_size_t);
-                    newary.insert(end(newary), sizeof(entity_size_t), 0);  // placeholder
-                    // if component is not invalidated, add it to the new ary
-                    for_each_component_in_entity(entity_ptr, [&](Component* component, void* data, entity_size_t) {
-                        if(component->id != INVALIDATED_COMPONENT) {
-                            size_t sz = newary.size();
-                            newary.insert(end(newary), sizeof(Component) + component->sz, 0);
-                            memcpy(&newary[sz], component, sizeof(Component));
-                            memcpy(&newary[sz + sizeof(Component)], data, component->sz);
-                            current_sz = static_cast<entity_size_t>(current_sz + sizeof(Component) + component->sz);
-                        }
-                        return false;
-                    });
-                    // adjust entity size
-                    entity_size_t* entity_sz_ptr = reinterpret_cast<entity_size_t*>(&newary[current_newary]);
-                    *entity_sz_ptr = current_sz;
-                    // adjust _entities
-                    _entities[entity] = current_newary;
-                }
-                return false;
-            }, false);
-
-            newary.shrink_to_fit();
-            _ary = move(newary);
-        }
-
-    private:
-#ifdef GTEST
-        FRIEND_TEST(RawTest, add_entity);
-        FRIEND_TEST(RawTest, add_components);
-        FRIEND_TEST(RawTest, invalidate_components);
-        FRIEND_TEST(RawTest, InvalidateEntities);
-        FRIEND_TEST(RawTest, compress);
-        FRIEND_TEST(RawTest, DifferentSizes);
-        FRIEND_TEST(RawTest, InvalidSizes);
-        FRIEND_TEST(RawTest, IterateConst);
-
-        FRIEND_TEST(RawTestData, vector_data);
-        FRIEND_TEST(RawTestStr, add_entities_and_components);
-
-        FRIEND_TEST(EngineLeakTest, Leak);
-#endif
-
-        std::vector<size_t> _entities = {};
-        std::vector<uint8_t> _ary = {};
-
-        template<typename PTR>
-        void _ary_append_bytes(PTR* origin, size_t sz, ssize_t pos) {
-            if(pos == -1) {
-                pos = _ary.size();
-            }
-            _ary.insert(begin(_ary)+pos, sz, 0);    // IMPORTANT! _ary might relocate here!
-            _ary_copy_bytes(origin, sz, pos);
-        }
-
-        template<typename PTR>
-        void _ary_copy_bytes(PTR* origin, size_t sz, size_t pos) {
-            memcpy(&_ary[pos], reinterpret_cast<uint8_t*>(origin), sz);
-        }
-
-        size_t _find_space_for_component(size_t entity, size_t total_sz) {
-            // find entity size
-            if(entity >= _entities.size()) {
-                throw ECSError("Entity does not exist");
-            }
-            size_t idx = _entities[entity];
-            if(idx == INVALIDATED_ENTITY) {
-                throw ECSError("Using a removed entity");
-            }
-            entity_size_t entity_sz = *reinterpret_cast<entity_size_t*>(&_ary[idx]);
-            
-            // check if we can reuse any inactive components
-            uint8_t* entity_ptr = &_ary[idx];
-            entity_size_t pos = -1;
-            for_each_component_in_entity(entity_ptr, [&](Component* component, void*, entity_size_t offset) -> bool {
-                if(component->id == INVALIDATED_COMPONENT && component->sz <= entity_sz) {
-                    pos = offset;
-                    return true;
-                }
-                return false;
-            }, false);
-            if(pos != -1) {
-                return idx + static_cast<size_t>(pos);
-            }
-
-            // we can't reuse inactive components, so we open space in _ary
-            if(entity_sz + total_sz > std::numeric_limits<entity_size_t>::max()) {
-                throw ECSError("By adding this component, the entity would become too large.");
-            }
-            _ary.insert(begin(_ary) + idx + entity_sz, total_sz, 0);  // IMPORTANT! _ary can relocate here!
-            // adjust indexes
-            for(auto it=begin(_entities)+entity+1; it != end(_entities); ++it) {
-                *it += total_sz;
-            }
-            // adjust entity size
-            entity_size_t* sz = reinterpret_cast<entity_size_t*>(&_ary[idx]);
-            *sz = static_cast<entity_size_t>(entity_sz + total_sz);
-            return idx + static_cast<size_t>(entity_sz);
-        }
-    };
-
-    // }}}
-/*
-class RawData<entity_size_t, component_id_t, component_size_t> {
-    void          add_entity();
-    bool          is_entity_valid(size_t entity) const;
-    entity_size_t entity_size(size_t entity) const;
-    uint8_t*      entity_ptr(size_t) const;
-    void          invalidate_entity(size_t entity);
-  
-    void          add_component(size_t entity, component_size_t sz,
-                               component_id_t id, void* data);
-    void          invalidate_component(size_t entity, component_id_t id,
-                                      function<void(void* data)> destructor);
-  
-    // return true to stop searching
-    void          for_each_entity(function<bool(size_t entity, uint8_t* entity_ptr)> f, 
-                                bool skip_invalid = true);
-    void          for_each_component_in_entity(uint8_t* entity_ptr, 
-                      function<bool(Component* c, uint8_t* data, entity_size_t pos)> f);
-  
-    void          compress();
-}
-*/
-
-    // {{{ TEMPLATE MAGIC
-    
-    // "function" that returns a signed integer type based on the number
-    template<size_t n, typename = void> struct SignedDataTypeImpl;
-    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n <= std::numeric_limits<int8_t>::max())>::type> { using type = int8_t; };
-    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<int8_t>::max() && n <= std::numeric_limits<int16_t>::max())>::type> { using type = int16_t; };
-    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<int16_t>::max() && n <= std::numeric_limits<int32_t>::max())>::type> { using type = int32_t; };
-    template<size_t n> struct SignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<int32_t>::max() && n <= std::numeric_limits<int64_t>::max())>::type> { using type = int64_t; };
-    template<size_t n> using SignedDataType = typename SignedDataTypeImpl<n>::type;
-
-    // "function" that returns a unsigned integer type based on the number
-    template<size_t n, typename = void> struct UnsignedDataTypeImpl;
-    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n <= std::numeric_limits<uint8_t>::max())>::type> { using type = uint8_t; };
-    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<uint8_t>::max() && n <= std::numeric_limits<uint16_t>::max())>::type> { using type = uint16_t; };
-    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<uint16_t>::max() && n <= std::numeric_limits<uint32_t>::max())>::type> { using type = uint32_t; };
-    template<size_t n> struct UnsignedDataTypeImpl<n, typename std::enable_if<(n > std::numeric_limits<uint32_t>::max() && n <= std::numeric_limits<uint64_t>::max())>::type> { using type = uint64_t; };
-    template<size_t n> using UnsignedDataType = typename UnsignedDataTypeImpl<n>::type;
-
-    // return the maximum size of a list of types
-    template<typename T> static constexpr size_t max_size() { return sizeof(T); }
-    template<typename T, typename U, typename... V> static constexpr size_t max_size() {
-        return max_size<T>() > max_size<U, V...>() ?  max_size<T>() : max_size<U, V...>();
-    }
-
-    // return the sum of the sizes of a list of types
-    template<typename T> static constexpr size_t sum_size() { return sizeof(T); }
-    template<typename T, typename U, typename... V> static constexpr size_t sum_size() {
-        return sum_size<T>() + sum_size<U, V...>();
-    }
-
-    // create a tuple from the component list
-    using ComponentTuple = typename std::tuple<Components...>;
-    static_assert(std::tuple_size<ComponentTuple>::value > 0, "Add at least one component.");
-
-    // detect types
-    using entity_size_t    = SignedDataType<sum_size<Components...>()>;                  // entity index size
-    using component_id_t   = UnsignedDataType<std::tuple_size<ComponentTuple>::value>;   // component id size
-    using component_size_t = UnsignedDataType<max_size<Components...>()>;                // component index size
-
-    // find index by type in a tuple
-    template<typename T, typename Tuple> struct tuple_index;
-    template<typename T, typename... Types> struct tuple_index<T, std::tuple<T, Types...>> { static const size_t value = 0; };
-    template<typename T, typename U, typename... Types> struct tuple_index<T, std::tuple<U, Types...>> { static const size_t value = 1 + tuple_index<T, std::tuple<Types...>>::value; };
-
-    // return the ID of a component
-    template<typename C> static constexpr component_id_t component_id() {
-        return tuple_index<C, ComponentTuple>::value;
-    }
-    
-    // execute operator<< of struct (with and without)
-    template<typename C, typename std::enable_if<has_ostream_method<C>::value>::type* = nullptr>
-    std::function<void(std::ostream&, void const*)> create_debugger() {
-        return [](std::ostream& os, void const* data) {
-            C const* c = reinterpret_cast<C const*>(data);
-
-            int status;
-            std::string tname = typeid(C).name();
-#ifndef NOABI
-            char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
-            if(status == 0) {
-                tname = demangled_name;
-                free(demangled_name);
-            }
-#endif
-
-            os << "'" << tname << "': { " << *c << " }";
-        };
-    }
-
-    template<typename C, typename std::enable_if<!has_ostream_method<C>::value>::type* = nullptr>
-    std::function<void(std::ostream&, void const*)> create_debugger() {
-        return [](std::ostream& os, void const*) {
-            int status;
-            std::string tname = typeid(C).name();
-#ifndef NOABI
-            char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
-            if(status == 0) {
-                tname = demangled_name;
-                free(demangled_name);
-            }
-#endif
-            os << "'" << tname << "': {}";
-        };
-    }
-
-    // }}}
-
-    template<typename C>
-    std::function<void(void*)> create_destructor() {
-        return [](void* data) {
-            reinterpret_cast<C*>(data)->~C();
-        };
-    }
-
-    RawData<entity_size_t, component_id_t, component_size_t> _rd = {};
-    std::vector<std::function<void(void*)>> _destructors = { create_destructor<Components>()... };
-    std::vector<std::function<void(std::ostream&, void const*)>> _debuggers = { create_debugger<Components>()... };
-    std::vector<size_t> _sizes = { sizeof(Components)... };
-    std::vector<System*> _systems = {};
-};
-
-
-}  // namespace ECS
-
-#endif  // #if 0  // }}}
 
 #endif
 
