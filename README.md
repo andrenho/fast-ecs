@@ -21,12 +21,10 @@ This library was tested with the `g++` and `clang++` compilers.
 //
 
 struct Position {
-    Position(float x, float y) : x(x), y(y) {}
     float x, y;
 };
 
 struct Direction {
-    Direction(float angle) : angle(angle) {}
     float angle;
 };
 
@@ -34,8 +32,8 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ECS::Engine<
-	class System, ECS::NoGlobal, ECS::NoQueue, 
+using MyEngine = ecs::Engine<
+	class System, ecs::NoGlobal, ecs::NoEventQueue, 
 	Position, Direction            // <-- component list
 >;
 
@@ -52,7 +50,7 @@ public:
 class PositionSystem : public System {
 public:
     void execute(MyEngine& e) override {
-        e.for_each<Position>([](size_t entity, Position& pos) {
+        e.for_each<Position>([](MyEngine&, ecs::Entity entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
@@ -63,7 +61,7 @@ public:
 class DirectionSystem : public System {
 public:
     void execute(MyEngine& e) override {
-        e.for_each<Direction>([](size_t entity, Direction& dir) {
+        e.for_each<Direction>([](MyEngine&, ecs::Entity entity, Direction& dir) {
             std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
         });
     }
@@ -77,8 +75,8 @@ int main()
 {
     MyEngine e;
 
-    size_t e1 = e.add_entity(),
-           e2 = e.add_entity();
+    ecs::Entity e1 = e.add_entity(),
+                e2 = e.add_entity();
 
     e.add_component<Position>(e1, 20.f, 30.f);
     e.add_component<Direction>(e1, 1.2f);
@@ -105,114 +103,113 @@ Entity 0 direction is 1.2.
 
 # API
 
-Engine management:
+## Engine management
 
 ```C++
-Engine<System, EventType, Components...>();   // create a new Engine
+Engine<System, Global, Event, Components...>();   // create a new Engine
 // `System` is the parent class for all systems. 
-//     Use `ECS::NoSystem` if you don't want to use any systems.
-// `EventType` is a variant type that contains all event types.
-//     Use `ECS::NoQueue` if you don't want to use an event queue.
-// `Components...` is a list of all components (structs) 
-//     that can be added to the Engine.
+//     Use `ecs::NoSystem` if you don't want to use any systems.
+// `Global` is a class for storing global data. In needs to be default constructive.
+//     Use `ecs::NoGlobal` if you don't want to use any systems.
+// `Event` is a variant type that contains all event types. It must be a std::variant<...>.
+//     Use `ecs::NoEventQueue` if you don't want to use an event queue.
+// `Components...` is a list of all components (structs) that can be added to the Engine.
+//     They need to be copyable.
 
 // Since you'll want to use the engine declaration everywhere
 // (pass to functions, etc), it is better to use a type-alias:
-using MyEngine = ECS::Engine<System, EventType, Position, Direction>;
+using MyEngine = ecs::Engine<System, Global, Event, Position, Direction>;
 ```
 
-Entity management:
+## Entity management
 
 ```C++
-size_t add_entity();                // create a new entity, and return that entity identifier number
-void   remove_entity(size_t ent);   // delete an entity
+ecs::Entity add_entity(std::string name=""); // create a new entity, and return that entity identifier
+void        remove_entity(Entity ent);       // delete an entity
 ```
 
-Component management:
+`ecs::Entity` is simply a wrapper around a `size_t`, as the entity is simply a number. The
+real number can be read by using the entity `get()` method.
+
+A name can be given to the entity. This is useful for one-of-a-kind entites. All later request
+can be referred using this name, such as:
+
+```C++
+e.add_entity("myname");
+e.remove_entity("my_name");
+```
+
+## Component management
 
 ```C++
 // A component is simply a struct.
 
 struct Position {
     double x, y;
-    Position(double x, double y) : x(x), y(y) {}
 };
 
 // More complex components can be used. The destructor will be 
 // called when the component is destroyed.
 
 struct Polygon {
-    vector<Point> points = {};
+    std::vector<Point> points = {};
+    std::string        description;
 };
 ```
 
 Avoid using pointers in components, as it defeats the porpouse of the high speed array of this library.
 
-Also, remember that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their number.
+Also, remember that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their identifier (`ecs::Entity`) or name (`std::string`).
 
 ```C++
-C&   add_component<C>(size_t entity, ...);   // add a new component to an entity, calling its constructor
-C&   add_component(size_t entity, C&& c);    // add a new existing component to an entity
-void remove_component<C>(size_t entity);     // remove component from entity
+C&   add_component<C>(ecs::Entity entity, ...);   // add a new component to an entity, calling its constructor
+C&   add_component(ecs::Entity entity, C&& c);    // add a new existing component to an entity
+void remove_component<C>(ecs::Entity entity);     // remove component from entity
 
-bool has_component<C>(size_t entity);        // return true if entity contains a component
-C&   component<C>(size_t entity);            // return a reference to a component
+bool has_component<C>(ecs::Entity entity);        // return true if entity contains a component
+C&   component<C>(ecs::Entity entity);            // return a reference to a component
 
 // When getting a component, it can be edited directly:
 e.component<Position>(my_entity).x = 10;
 
 // `component_ptr` will return a pointer for the component, or nullptr if it doesn't exist.
-// Thus, it can be used as a faster combination of `has_component` and `component`
-C*   component_ptr<C>(size_t entity);
+// Thus, it can be used as a faster combination of `has_component` and `component`.
+C*   component_ptr<C>(ecs::Entity entity);
 ```
 
-Iterating over entities: 
+## Iterating over entities
 
 ```C++
-void for_each<C...>([](size_t entity, ...);
+void for_each<C...>([](Engine<...>& e, ecs::Entity entity, ...), bool iterate_inactive=false);
 
 // Example:
-e.for_each<Position, Direction>([](size_t ent, Position& pos, Direction& dir) {
+e.for_each<Position, Direction>([](MyEngine& e, ecs::Entity const& ent, Position& pos, Direction& dir) {
     // do something
 });
 
 // There's also a const version of ForEach: 
-e.for_each<Position, Direction>([](size_t ent, Position const& pos, Direction const& dir) {
+e.for_each<Position, Direction>([](MyEngine const& e, ecs::Entity const& ent, Position const& pos, Direction const& dir) {
     // do something
 });
 ```
 
-Tags:
+The `for_each` function is the central piece of this ECS library, and a lot of care has been taken
+to make sure that it is as fast as possible.
 
-Entites can be tagged with a name in the creation. This can be used
-to reference one-of-a-kind entities. Notice that the referente still returns
-an integer. However, all functions below that take a `size_t` as entity can
-also take a `std::string`.
+Entities can be set as active or inactive. They are created active by default. An inactive entity will
+not be iterated in `for_each`. This is useful in a game, for example, when there is a very large map
+but only the entities close to the player will move.
 
-```C++
-size_t      add_entity(std::string const& name);	 // notice we're passing a string here
-size_t      entity(std::string const& name);             // get the id of a tagged entity
-std::string entity_name(size_t id);                      // return the name of a tagged entity
-void        remove_entity(std::string const& name);
-
-C&          add_component<C>(std::string const& entity, ...);
-void        remove_component<C>(std::string const& entity);
-
-bool        has_component<C>(std::string const& entity);
-C&          component<C>(std::string const& entity);
-
-// etc...
-```
-
-Management:
-
-After deleting and readding many entities and components, the component array will become fragmented. So, eventually, is a good idea to compress the array, removing the spaces that were left:
+Entities can be activated/deactivated with the following functions:
 
 ```C++
-void compress();
+void set_entity_active(ecs::Entity ent, bool active);
+bool is_entity_active(ecs::Entity ent);
 ```
 
-Systems:
+To iterate over all entities, active and inactive, pass `iterate_inactive` as true in the call to `for_each`.
+
+## Systems
 
 ```C++
 // all systems must inherit from a single class
@@ -230,6 +227,7 @@ struct MySystem : public System {
 System&         add_system<S>(...);    // add a new system (call constructor)
 System const&   system<S>() const;     // return a reference to a system
 vector<System*> systems();             // return a vector of systems to iterate, example:
+void            remove_system<S>();    // remove a previously added system
 
 /* The method `system<T>` returns a const referente to a system. It is used for one
    system to read information from another system. To make one system modify data
@@ -242,11 +240,11 @@ for(auto& sys: e.systems()) {
 // You can only add one system of each type (class).
 ```
 
-Globals:
+## Globals
 
 Globals can be used for an unique piece of information that is shared between
 all system. The global type is set on the engine initialization, and it can
-be replaced by `ECS::NoGlobal` if it is not used.
+be replaced by `ecs::NoGlobal` if it is not used.
 
 If used, the type need to be default constructible, and it is initialized along
 with the engine.
@@ -256,7 +254,7 @@ struct GlobalData {
     int x = 42;
 };
 
-using MyEngine = ECS::Engine<class System, GlobalData, ECS::NoQueue, MyComponent>;
+using MyEngine = ecs::Engine<class System, GlobalData, ecs::NoQueue, MyComponent>;
 MyEngine e;
 
 std::cout << e.global().x << "\n";    // result: 42
@@ -264,7 +262,7 @@ e.global().x = 8;
 std::cout << e.global().x << "\n";    // result: 8
 ```
 
-Event queues:
+## Event queues
 
 Events queues can be used by a system to send messages to all systems. The message
 type must be a `std::variant` that contains all message types.
@@ -274,19 +272,19 @@ type must be a `std::variant` that contains all message types.
 
 // Define the message types.
 struct EventDialog { std::string msg; };
-struct EventKill   { size_t id; };
+struct EventKill   { ecs::Entity id; };
 using EventType = std::variant<EventDialog, EventKill>;
 
 // Create engine passing this type.
-using MyEngine = ECS::Engine<System, EventType, MyComponents...>;
+using MyEngine = ecs::Engine<System, EventType, MyComponents...>;
 MyEngine e;
 
 // Send an event to all systems.
-e.send(EventDialog { "Hello!" });
+e.send_event(EventDialog { "Hello!" });
 
 // In the system, `events` can be used to read each of the messages in the event queue.
 // This will not clear the events from the queue, as other system might want to read it as well.
-for (EventDialog const& ev: e.events<EventDialog>()) {
+for (EventDialog const& ev: e.event_queue<EventDialog>()) {
     // do something with `ev`...
 }
 
@@ -296,14 +294,13 @@ for(auto& sys: e.systems())
 e.clear_queue();
 ```
 
-# Component printing
+## Component printing
 
-To be able to print a component, the `operator<<` must be implemented. Example:
+To be able to print a component, the `operator<<` function must be implemented. Example:
 
 ```C++
 struct Direction {
     float angle;
-    friend ostream& operator<<(ostream& out, Direction const& dir);
 };
 
 ostream& operator<<(ostream& out, Direction const& dir) {
@@ -312,14 +309,14 @@ ostream& operator<<(ostream& out, Direction const& dir) {
 }
 
 // Then, to print all components of an entity:
-e.examine(cout, my_entity);
+cout << e.debug_entity(my_entity) << "\n";
 
 // If the method `operator<<` is implemented to the Global type, global data
 // can be printed with:
-e.examine_global(cout);
+cout << e.debug_global() << "\n";
 
 // If you want to print all components of all entities, and the global data:
-e.examine(cout);
+cout << e.debug_all() << "\n";
 
 // The result is:
 { '0':
@@ -327,4 +324,26 @@ e.examine(cout);
 },
 ```
 
+A phrase describing the entity can be added with the function below. It'll be printed when
+the entity is debugged:
+
+```C++
+void set_entity_debugging_info(Entity ent, std::string text);
+```
+
 If the `operator<<` is not implemented for a component, the class name will be printed instead.
+
+By default, only the active entities will be printed when debugging all. To print everything,
+call `e.debug_all(true);`.
+
+## Additional info:
+
+The following methods provide additional info about the engine:
+
+```C++
+size_t number_of_entities();
+size_t number_of_components();
+size_t number_of_event_types();
+size_t number_of_systems();
+size_t event_queue_size();
+```
