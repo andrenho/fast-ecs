@@ -50,9 +50,9 @@ public:
 class PositionSystem : public System {
 public:
     void execute(MyEngine& e) override {
-        e.for_each<Position>([](MyEngine&, ecs::Entity entity, Position& pos) {
+        e.for_each<Position>([](MyEngine&, ecs::Entity const& entity, Position& pos) {
             pos.x += 1;
-            std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
+            std::cout << "Entity " << entity.get() << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
         });
     }
@@ -61,8 +61,8 @@ public:
 class DirectionSystem : public System {
 public:
     void execute(MyEngine& e) override {
-        e.for_each<Direction>([](MyEngine&, ecs::Entity entity, Direction& dir) {
-            std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
+        e.for_each<Direction>([](MyEngine&, ecs::Entity const& entity, Direction& dir) {
+            std::cout << "Entity " << entity.get() << " direction is " << dir.angle << ".\n";
         });
     }
 };
