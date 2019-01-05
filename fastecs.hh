@@ -40,6 +40,7 @@ struct Entity {
     Entity& operator=(Entity const& e)      { value = e.value; return *this; }
 
     bool operator==(Entity const& e) const  { return value == e.get(); }
+    bool operator!=(Entity const& e) const  { return value != e.get(); }
     bool operator<(Entity const& e) const   { return value < e.get(); }
 
 private:
@@ -177,20 +178,34 @@ public:
     void     for_each(F user_function, bool include_inactive=false) {
         // {{{ ...
 
-        // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
-        std::tuple<my_iter<C>...> current;
-        ((std::get<my_iter<C>>(current) = comp_vec<C>(true).begin()), ...);
-        
-        // while none of the iterators reached end
-        while (((std::get<my_iter<C>>(current) != comp_vec<C>(true).end()) || ...)) {
-            // find iterator that is more behind
+        auto iteration = [&](bool active) {
+            // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+            std::tuple<my_iter<C>...> current;
+            ((std::get<my_iter<C>>(current) = comp_vec<C>(active).begin()), ...);
+            
+            // while none of the iterators reached end
+            while (((std::get<my_iter<C>>(current) != comp_vec<C>(active).end()) || ...)) {
+                // find iterator that is more advanced
+                std::vector<Entity> entities1 { std::get<my_iter<C>>(current)->first... };
+                Entity last = *std::max_element(entities1.begin(), entities1.end());
 
-            // advance all iterators
-            (std::get<my_iter<C>>(current)++, ...);
+                // advance all iterators that are behind the latest one
+                (((std::get<my_iter<C>>(current)->first < last) ? std::get<my_iter<C>>(current)++ : std::get<my_iter<C>>(current)), ...);
+                if (((std::get<my_iter<C>>(current) == comp_vec<C>(active).end()) || ...))
+                    break;
 
-            // call function
-            user_function(*this, Entity(0), std::get<my_iter<C>>(current)->second...);
-        }
+                // if all iterators are equal, call user function and advance all iterators
+                std::vector<Entity> entities2 { std::get<my_iter<C>>(current)->first... };
+                if (std::adjacent_find(entities2.begin(), entities2.end(), std::not_equal_to<Entity>()) == entities2.end()) {
+                    user_function(*this, Entity(0), std::get<my_iter<C>>(current)->second...);
+                    (std::get<my_iter<C>>(current)++, ...);
+                }
+            }
+        };
+
+        iteration(true);
+        if (include_inactive)
+            iteration(false);
 
         // }}}
     }

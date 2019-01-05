@@ -135,6 +135,8 @@ TEST_CASE("iteration") {
     });
     CHECK(s == "helloworld");
 
+    // TODO - const version
+
     // TODO - active/deactivate
 
     // }}}
