@@ -16,7 +16,6 @@ TEST_CASE("entities") {
     struct C {};
     Engine<NoSystem, NoGlobal, NoEventQueue, C> e;
 
-    // simple entity
     CHECK(e.number_of_entities() == 0);
 
     Entity id = e.add_entity();
@@ -27,24 +26,30 @@ TEST_CASE("entities") {
     CHECK(id2.get() == 1);
     CHECK(e.number_of_entities() == 2);
 
-    CHECK(e.is_entity_active("test"));
-    e.set_entity_active("test", false);
-    CHECK(!e.is_entity_active(id2));
-    CHECK(!e.is_entity_active("test"));
-    CHECK(e.is_entity_active(id));
+    SUBCASE("entity active")  {
+        CHECK(e.is_entity_active("test"));
+        e.set_entity_active("test", false);
+        CHECK(!e.is_entity_active(id2));
+        CHECK(!e.is_entity_active("test"));
+        CHECK(e.is_entity_active(id));
+    }
 
-    e.set_entity_debugging_info(id, "debugging_info");
-    CHECK(e.entity_debugging_info(id).value() == "debugging_info");
-    CHECK(!e.entity_debugging_info(id2));
+    SUBCASE("debugging info") {
+        e.set_entity_debugging_info(id, "debugging_info");
+        CHECK(e.entity_debugging_info(id).value() == "debugging_info");
+        CHECK(!e.entity_debugging_info(id2));
+    }
 
-    e.remove_entity(id);
-    CHECK(e.number_of_entities() == 1);
+    SUBCASE("remove entity") {
+        e.remove_entity(id);
+        CHECK(e.number_of_entities() == 1);
 
-    CHECK_THROWS(e.is_entity_active(id));
-    CHECK_THROWS(e.set_entity_active(id, false));
-    CHECK_THROWS(e.set_entity_debugging_info(id, ""));
-    CHECK_THROWS(e.entity_debugging_info(id));
-    CHECK_THROWS(e.remove_entity(id));
+        CHECK_THROWS(e.is_entity_active(id));
+        CHECK_THROWS(e.set_entity_active(id, false));
+        CHECK_THROWS(e.set_entity_debugging_info(id, ""));
+        CHECK_THROWS(e.entity_debugging_info(id));
+        CHECK_THROWS(e.remove_entity(id));
+    }
 
     // }}}
 }
@@ -56,42 +61,55 @@ TEST_CASE("components") {
     struct B { string y; };
 
     Engine<NoSystem, NoGlobal, NoEventQueue, A, B> e;
-    Entity id = e.add_entity();
+    Entity id = e.add_entity(),
+           id2 = e.add_entity(),
+           id3 = e.add_entity(),
+           id4 = e.add_entity();
 
     A& a = e.add_component<A>(id, 42);
-    CHECK_THROWS(e.add_component<A>(id, 43));
-    CHECK(a.x == 42);
     e.add_component<B>(id, "hello");
-
-    Entity id2 = e.add_entity(),
-           id3 = e.add_entity();
     CHECK(e.add_component<A>(id3, 44).x == 44);
     CHECK(e.add_component<A>(id2, 43).x == 43);
-    CHECK(e.components_are_sorted<A>());
 
-    CHECK(e.component_ptr<A>(id)->x == 42);
-    CHECK(e.component_ptr<A>(id2)->x == 43);
-    CHECK(e.component_ptr<A>(id3)->x == 44);
+    SUBCASE("add component") {
+        CHECK_THROWS(e.add_component<A>(id, 43));
+        CHECK(a.x == 42);
 
-    Entity id4 = e.add_entity();
-    CHECK(!e.component_ptr<A>(id4));
+        CHECK(e.components_are_sorted<A>());
+    }
 
-    CHECK(e.has_component<A>(id));
-    CHECK(e.component<A>(id).x == 42);
-    CHECK(!e.has_component<A>(id4));
-    CHECK_THROWS(e.component<A>(id4));
+    SUBCASE("component_ptr") {
+        CHECK(e.component_ptr<A>(id)->x == 42);
+        CHECK(e.component_ptr<A>(id2)->x == 43);
+        CHECK(e.component_ptr<A>(id3)->x == 44);
 
-    CHECK(e.component<B>(id).y == "hello");
+        CHECK(!e.component_ptr<A>(id4));
+    }
 
-    e.remove_component<A>(id);
-    CHECK_THROWS(e.remove_component<A>(id));
-    CHECK(e.component<B>(id).y == "hello");
-    CHECK(e.component<A>(id2).x == 43);
-    CHECK_THROWS(e.component<A>(id));
+    SUBCASE("component / has_component") {
+        CHECK(e.has_component<A>(id));
+        CHECK(e.component<A>(id).x == 42);
+        CHECK(!e.has_component<A>(id4));
+        CHECK_THROWS(e.component<A>(id4));
+    }
+
+    SUBCASE("is string still valid?") {
+        CHECK(e.component<B>(id).y == "hello");
+    }
+
+    SUBCASE("remove component") {
+        e.remove_component<A>(id);
+        CHECK_THROWS(e.remove_component<A>(id));
+        CHECK(e.component<B>(id).y == "hello");
+        CHECK(e.component<A>(id2).x == 43);
+        CHECK_THROWS(e.component<A>(id));
+    }
     
-    e.remove_entity(id);
-    CHECK_THROWS(e.component<A>(id));
-    CHECK_THROWS(e.component<B>(id));
+    SUBCASE("remove entity") {
+        e.remove_entity(id);
+        CHECK_THROWS(e.component<A>(id));
+        CHECK_THROWS(e.component<B>(id));
+    }
 
     // }}}
 }
@@ -106,7 +124,7 @@ TEST_CASE("iteration") {
     MyEngine e;
     Entity id = e.add_entity();
 
-    A& a = e.add_component<A>(id, 42);
+    e.add_component<A>(id, 42);
     e.add_component<B>(id, "hello");
 
     Entity id2 = e.add_entity(),
@@ -114,32 +132,112 @@ TEST_CASE("iteration") {
     e.add_component<A>(id2, 43);
     e.add_component<B>(id3, "world");
 
-    int sum = 0;
-    e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) {
-        sum += a.x;
-    });
-    CHECK(sum == (42 + 43));
+    SUBCASE("iterate one component") {
+        int sum = 0;
+        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) {
+            sum += a.x;
+        });
+        CHECK(sum == (42 + 43));
 
-    std::string s;
-    sum = 0;
-    e.for_each<A, B>([&sum, &s](MyEngine&, Entity const&, A& a, B& b) {
-        sum += a.x;
-        s += b.y;
-    });
-    CHECK(sum == 42);
-    CHECK(s == "hello");
+        std::string s;
 
-    s = "";
-    e.for_each<B>([&s](MyEngine&, Entity const&, B& b) {
-        s += b.y;
-    });
-    CHECK(s == "helloworld");
+        e.for_each<B>([&s](MyEngine&, Entity const&, B& b) {
+            s += b.y;
+        });
+        CHECK(s == "helloworld");
+    }
 
-    // TODO - const version
+    SUBCASE("itereate more than one compoenent") {
+        std::string s = "";
+        int sum = 0;
+        e.for_each<A, B>([&sum, &s](MyEngine&, Entity const&, A& a, B& b) {
+            sum += a.x;
+            s += b.y;
+        });
+        CHECK(sum == 42);
+        CHECK(s == "hello");
+    }
 
-    // TODO - active/deactivate
+    SUBCASE("const iteration") {
+        MyEngine const& ce = e;
+        std::string s = "";
+        int sum = 0;
+        ce.for_each<A, B>([&sum, &s](MyEngine const&, Entity const&, A const& a, B const& b) {
+            sum += a.x;
+            s += b.y;
+        });
+        CHECK(sum == 42);
+        CHECK(s == "hello");
+    }
+
+    SUBCASE("activate/deactivate") {
+        int sum = 0;
+        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; });
+        CHECK(sum == (42 + 43));
+
+        e.set_entity_active(id, false);
+        sum = 0;
+        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; });
+        CHECK(sum == 43);
+
+        sum = 0;
+        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; }, true);
+        CHECK(sum == (42 + 43));
+
+        e.set_entity_active(id, true);
+        sum = 0;
+        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; });
+        CHECK(sum == (42 + 43));
+    }
 
     // }}}
+}
+
+TEST_CASE("engine copyable") {
+    // {{{ ...
+
+    struct A { int x; };
+    struct B { string y; };
+
+    using MyEngine = Engine<NoSystem, NoGlobal, NoEventQueue, A, B>;
+    MyEngine e;
+    Entity id = e.add_entity();
+
+    e.add_component<A>(id, 42);
+    e.add_component<B>(id, "hello");
+
+    MyEngine b = e;
+    
+    SUBCASE("copy successful") {
+        CHECK(b.component<A>(id).x == 42);
+        CHECK(b.component<B>(id).y == "hello");
+    }
+
+    // }}}
+}
+
+TEST_CASE("systems") {
+    class System {
+    public:
+        virtual ~System() {}
+    };
+
+    struct C {};
+    using MyEngine = Engine<System, NoGlobal, NoEventQueue, C>;
+    MyEngine e;
+
+    struct TestSystem : public System {
+        TestSystem(int i) : i(i) {}
+        void Execute(MyEngine&) { CHECK(i == 2); }
+        int i;
+    };
+
+    SUBCASE("add system") {   
+        e.add_system<TestSystem>(2);
+        CHECK(e.system<TestSystem>().i == 2);
+        CHECK(e.systems().size() == 1); 
+        CHECK_THROWS(e.add_system<TestSystem>(2));
+    }
 }
 
 #if 0  // {{{

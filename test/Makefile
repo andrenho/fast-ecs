@@ -23,6 +23,9 @@ example.o: example.cc ../fastecs.hh
 lint:
 	clang-tidy ../fastecs.hh "-checks=*,-google-build-using-namespace,-google-readability-todo,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-pro-type-const-cast,-cert-err52-cpp" -- --std=c++14
 
+check: test-fast-ecs
+	./test-fast-ecs
+
 check-leaks: test-fast-ecs
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --suppressions=sendmsg.supp ./test-fast-ecs
 

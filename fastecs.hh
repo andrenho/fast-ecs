@@ -174,6 +174,9 @@ public:
     template <typename C>
     using my_iter = typename std::vector<std::pair<Entity, C>>::iterator;
 
+    template <typename C>
+    using my_citer = typename std::vector<std::pair<Entity, C>>::const_iterator;
+
     template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) {
         // {{{ ...
@@ -211,19 +214,69 @@ public:
     }
 
     template<typename... C, typename F>
-    void     for_each(F user_function, bool include_inactive=false) const;
+    void     for_each(F user_function, bool include_inactive=false) const {
+        // {{{ ...
+
+        auto iteration = [&](bool active) {
+            // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+            std::tuple<my_citer<C>...> current;
+            ((std::get<my_citer<C>>(current) = comp_vec<C>(active).cbegin()), ...);
+            
+            // while none of the iterators reached end
+            while (((std::get<my_citer<C>>(current) != comp_vec<C>(active).cend()) || ...)) {
+                // find iterator that is more advanced
+                std::vector<Entity> entities1 { std::get<my_citer<C>>(current)->first... };
+                Entity last = *std::max_element(entities1.cbegin(), entities1.cend());
+
+                // advance all iterators that are behind the latest one
+                (((std::get<my_citer<C>>(current)->first < last) ? std::get<my_citer<C>>(current)++ : std::get<my_citer<C>>(current)), ...);
+                if (((std::get<my_citer<C>>(current) == comp_vec<C>(active).cend()) || ...))
+                    break;
+
+                // if all iterators are equal, call user function and advance all iterators
+                std::vector<Entity> entities2 { std::get<my_citer<C>>(current)->first... };
+                if (std::adjacent_find(entities2.cbegin(), entities2.cend(), std::not_equal_to<Entity>()) == entities2.cend()) {
+                    user_function(*this, Entity(0), std::get<my_citer<C>>(current)->second...);
+                    (std::get<my_citer<C>>(current)++, ...);
+                }
+            }
+        };
+
+        iteration(true);
+        if (include_inactive)
+            iteration(false);
+
+        // }}}
+    }
 
     //
     // systems
     //
 
-    template <typename... P>
-    System&              add_system(P&& ...pars);
-    
-    template <typename S>
-    System const&        system() const;
+    template<typename S, typename... P> S& add_system(P&& ...pars) {
+        for(auto& sys: _systems) {
+            S const* s = dynamic_cast<S const*>(sys.get());
+            if(s)
+                throw ECSError("A system of this type already exist in system list.");
+        }
+        _systems.push_back(std::make_shared<S>(pars...));
+        return *static_cast<S*>(_systems.back().get());
+    }
 
-    std::vector<System*> systems() const;
+    template <typename S>
+    System&              add_system(S&& s);  // TODO
+    
+    template<typename S> S const& system() const {
+        for(auto& sys: _systems) {
+            S const* s = dynamic_cast<S const*>(sys.get());
+            if(s) {
+                return *s;
+            }
+        }
+        throw std::runtime_error("System not found.");
+    }
+
+    std::vector<std::shared_ptr<System>> const& systems() const { return _systems; }
 
     template <typename S>
     void                 remove_system();
@@ -327,13 +380,38 @@ private:
         return std::get<std::vector<std::pair<Entity, C>>>(active ? _components_active : _components_inactive);
     }
 
-    std::map<Entity, bool>        _entities            = {};
-    ComponentTupleVector          _components_active   = {},
-                                  _components_inactive = {};
-    std::map<std::string, Entity> _named_entities      = {};
-    std::map<Entity, std::string> _debugging_info      = {};
+    template <typename C>
+    void move_component(Entity const& id, bool from, bool to) {
+        // {{{ ...
+        auto& origin = comp_vec<C>(from);
+        auto& dest   = comp_vec<C>(to);
 
-    size_t                        _next_entity_id      = 0;
+        // origin iterator
+        auto it_origin = std::lower_bound(begin(origin), end(origin), id,
+            [](auto const& p, Entity const& e) { return p.first < e; });
+        if (it_origin == origin.end() || it_origin->first != id)  // not found
+            return;
+        
+        // dest iterator
+        auto it_dest = std::lower_bound(begin(dest), end(dest), id,
+            [](auto const& p, Entity const& e) { return p.first < e; });
+        if (it_dest != dest.end() && it_dest->first == id)  // shouldn't happen
+            throw std::logic_error(std::string("Component '") + component_name<C>() + "' already exist for entity " + std::to_string(id.get()) + ". This is an internal ecs error.");
+
+        dest.insert(it_dest, std::move(*it_origin));
+        origin.erase(it_origin);
+        // }}}
+    }
+
+    std::map<Entity, bool>               _entities            = {};
+    ComponentTupleVector                 _components_active   = {},
+                                         _components_inactive = {};
+    std::map<std::string, Entity>        _named_entities      = {};
+    std::map<Entity, std::string>        _debugging_info      = {};
+
+    std::vector<std::shared_ptr<System>> _systems = {};
+
+    size_t                               _next_entity_id      = 0;
 
     // }}}
 
@@ -369,9 +447,13 @@ ENGINE::is_entity_active(EntityOrName const& ent) const
 TEMPLATE void
 ENGINE::set_entity_active(EntityOrName const& ent, bool active)
 {
-    _entities.at(entity(ent)) = active;
+    Entity id = entity(ent);
+    _entities.at(id) = active;
 
-    // TODO - move between component list
+    if (active)
+        (move_component<Components>(id, false, true), ...);
+    else
+        (move_component<Components>(id, true, false), ...);
 }
 
 TEMPLATE std::optional<std::string>
