@@ -139,6 +139,9 @@ e.add_entity("myname");
 e.remove_entity("my_name");
 ```
 
+The library also provides a entity called `ecs::InvalidEntity`, that can be used to represent
+uninitialized references to entities.
+
 ## Component management
 
 ```C++

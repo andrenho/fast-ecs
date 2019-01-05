@@ -2,6 +2,7 @@
 #define FASTECS_HH_
 
 #include <algorithm>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -48,6 +49,8 @@ private:
     size_t   value;
     // }}}
 };
+
+const Entity InvalidEntity = Entity(std::numeric_limits<size_t>::max());
 
 using EntityOrName = std::variant<Entity, std::string>;
 
