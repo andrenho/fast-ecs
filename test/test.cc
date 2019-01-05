@@ -10,8 +10,9 @@
 using namespace std;
 using namespace ecs;
 
-TEST_CASE("entities") {
-
+TEST_CASE("entities") { 
+    // {{{...
+    
     struct C {};
     Engine<NoSystem, NoGlobal, NoEventQueue, C> e;
 
@@ -44,9 +45,12 @@ TEST_CASE("entities") {
     CHECK_THROWS(e.set_entity_debugging_info(id, ""));
     CHECK_THROWS(e.entity_debugging_info(id));
     CHECK_THROWS(e.remove_entity(id));
+
+    // }}}
 }
 
 TEST_CASE("components") {
+    // {{{ ...
 
     struct A { int x; };
     struct B { string y; };
@@ -88,6 +92,52 @@ TEST_CASE("components") {
     e.remove_entity(id);
     CHECK_THROWS(e.component<A>(id));
     CHECK_THROWS(e.component<B>(id));
+
+    // }}}
+}
+
+TEST_CASE("iteration") {
+    // {{{ ...
+
+    struct A { int x; };
+    struct B { string y; };
+
+    using MyEngine = Engine<NoSystem, NoGlobal, NoEventQueue, A, B>;
+    MyEngine e;
+    Entity id = e.add_entity();
+
+    A& a = e.add_component<A>(id, 42);
+    e.add_component<B>(id, "hello");
+
+    Entity id2 = e.add_entity(),
+           id3 = e.add_entity();
+    e.add_component<A>(id2, 43);
+    e.add_component<B>(id3, "world");
+
+    int sum = 0;
+    e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) {
+        sum += a.x;
+    });
+    CHECK(sum == (42 + 43));
+
+    std::string s;
+    sum = 0;
+    e.for_each<A, B>([&sum, &s](MyEngine&, Entity const&, A& a, B& b) {
+        sum += a.x;
+        s += b.y;
+    });
+    CHECK(sum == 42);
+    CHECK(s == "hello");
+
+    s = "";
+    e.for_each<B>([&s](MyEngine&, Entity const&, B& b) {
+        s += b.y;
+    });
+    CHECK(s == "helloworld");
+
+    // TODO - active/deactivate
+
+    // }}}
 }
 
 #if 0  // {{{

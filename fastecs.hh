@@ -53,7 +53,9 @@ template <typename System, typename Global, typename Event, typename... Componen
 class Engine {
 public:
 
+    //
     // entities
+    //
 
     Entity   add_entity(std::optional<std::string> const& name = {});
 
@@ -65,7 +67,9 @@ public:
 
     void     remove_entity(EntityOrName const& ent);
 
+    //
     // components
+    //
 
     template <typename C>
     C&       add_component(EntityOrName const& ent, C&& c) {
@@ -162,15 +166,42 @@ public:
         // }}}
     }
 
+    //
     // iteration
+    //
 
-    template<typename F, typename... C>
-    void     for_each(F user_function, bool include_inactive=false);
+    template <typename C>
+    using my_iter = typename std::vector<std::pair<Entity, C>>::iterator;
 
-    template<typename F, typename... C>
+    template<typename... C, typename F>
+    void     for_each(F user_function, bool include_inactive=false) {
+        // {{{ ...
+
+        // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+        std::tuple<my_iter<C>...> current;
+        ((std::get<my_iter<C>>(current) = comp_vec<C>(true).begin()), ...);
+        
+        // while none of the iterators reached end
+        while (((std::get<my_iter<C>>(current) != comp_vec<C>(true).end()) || ...)) {
+            // find iterator that is more behind
+
+            // advance all iterators
+            (std::get<my_iter<C>>(current)++, ...);
+
+            // call function
+            user_function(*this, Entity(0), std::get<my_iter<C>>(current)->second...);
+        }
+
+        // }}}
+    }
+
+    template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) const;
 
+    //
     // systems
+    //
+
     template <typename... P>
     System&              add_system(P&& ...pars);
     
@@ -182,12 +213,16 @@ public:
     template <typename S>
     void                 remove_system();
 
+    // 
     // globals
+    //
 
     Global&       global();
     Global const& global() const;
 
+    //
     // events
+    //
 
     void           send_event(Event ev);
 
@@ -196,7 +231,9 @@ public:
 
     void           clear_event_queue();
     
+    //
     // debugging
+    //
 
     void           debug_entity(std::ostream& os, EntityOrName const& ent) const;
 
@@ -210,26 +247,23 @@ public:
 
     void           debug_all(std::ostream& os) const;
 
+    //
     // information
+    //
 
     size_t number_of_entities() const;
     size_t number_of_components() const;
     size_t number_of_events() const;
     size_t number_of_systems() const;
     size_t event_queue_size() const;
-    size_t memory_used() const;
-
-    // integrity
-
-    void verify_integrity() const;
 
     // {{{ testable
 #ifdef TEST
 
     template <typename C>
     bool components_are_sorted() const {
-        auto& vec1 = comp_vec<C>(true),
-              vec2 = comp_vec<C>(false);
+        auto& vec1 = comp_vec<C>(true);
+        auto& vec2 = comp_vec<C>(false);
         return std::is_sorted(vec1.begin(), vec1.end(), 
                 [](auto const& p1, auto const& p2) { return p1.first < p2.first; })
             && std::is_sorted(vec2.begin(), vec2.end(), 
