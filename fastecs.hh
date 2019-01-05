@@ -190,7 +190,7 @@ public:
                 // if all iterators are equal, call user function and advance all iterators
                 std::vector<Entity> entities2 { std::get<my_iter<C>>(current)->first... };
                 if (std::adjacent_find(entities2.begin(), entities2.end(), std::not_equal_to<Entity>()) == entities2.end()) {
-                    user_function(*this, Entity(0), std::get<my_iter<C>>(current)->second...);
+                    user_function(*this, entities2.at(0), std::get<my_iter<C>>(current)->second...);
                     (std::get<my_iter<C>>(current)++, ...);
                 }
             }
@@ -226,7 +226,7 @@ public:
                 // if all iterators are equal, call user function and advance all iterators
                 std::vector<Entity> entities2 { std::get<my_citer<C>>(current)->first... };
                 if (std::adjacent_find(entities2.cbegin(), entities2.cend(), std::not_equal_to<Entity>()) == entities2.cend()) {
-                    user_function(*this, Entity(0), std::get<my_citer<C>>(current)->second...);
+                    user_function(*this, entities2.at(0), std::get<my_citer<C>>(current)->second...);
                     (std::get<my_citer<C>>(current)++, ...);
                 }
             }
