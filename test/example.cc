@@ -18,7 +18,7 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ECS::Engine<class System, ECS::NoGlobal, ECS::NoQueue, Position, Direction>;
+using MyEngine = ecs::Engine<class System, ecs::NoGlobal, ecs::NoEventQueue, Position, Direction>;
 
 //
 // SYSTEMS
@@ -33,9 +33,9 @@ public:
 class PositionSystem : public System {
 public:
     void Execute(MyEngine& e) override {
-        e.for_each<Position>([](size_t entity, Position& pos) {
+        e.for_each<Position>([](MyEngine&, ecs::Entity const& entity, Position& pos) {
             pos.x += 1;
-            std::cout << "Entity " << entity << " position.x was " << pos.x -1 <<
+            std::cout << "Entity " << entity.get() << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
         });
     }
@@ -44,8 +44,8 @@ public:
 class DirectionSystem : public System {
 public:
     void Execute(MyEngine& e) override {
-        e.for_each<Direction>([](size_t entity, Direction& dir) {
-            std::cout << "Entity " << entity << " direction is " << dir.angle << ".\n";
+        e.for_each<Direction>([](MyEngine&, ecs::Entity const& entity, Direction& dir) {
+            std::cout << "Entity " << entity.get() << " direction is " << dir.angle << ".\n";
         });
     }
 };
@@ -58,8 +58,8 @@ int main()
 {
     MyEngine e;
 
-    size_t e1 = e.add_entity(),
-           e2 = e.add_entity();
+    auto e1 = e.add_entity(),
+         e2 = e.add_entity();
 
     e.add_component(e1, Position { 20.f, 30.f });
     e.add_component(e1, Direction { 1.2f });
