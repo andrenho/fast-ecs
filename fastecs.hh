@@ -333,7 +333,8 @@ public:
 
     template <typename C>
     std::ostream& debug_component(std::ostream& os, EntityOrName const& ent) const {
-        // TODO
+        if constexpr(has_ostream_method<C>::value) {
+        }
         return os;
     }
 
