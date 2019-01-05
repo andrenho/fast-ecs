@@ -2,7 +2,6 @@
 #define FASTECS_HH_
 
 #include <algorithm>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <optional>
@@ -10,6 +9,7 @@
 #include <type_traits>
 #include <tuple>
 #include <stdexcept>
+#include <sstream>
 #include <string>
 #include <variant>
 #include <vector>
@@ -332,20 +332,15 @@ public:
     }
 
     template <typename C>
-    std::ostream& debug_component(std::ostream& os, EntityOrName const& ent) const {
-        if constexpr(has_ostream_method<C>::value) {
-        }
-        return os;
-    }
+    std::string debug_component(EntityOrName const& ent) const { return "{ " + debug_object<C>(component<C>(ent)) + "}"; }
 
-    std::ostream& debug_entity(std::ostream& os, EntityOrName const& ent) const;
+    std::string debug_entity(EntityOrName const& ent) const;
+    std::string debug_entities(bool include_inactive=false) const;
+    std::string debug_systems() const;
+    std::string debug_global() const;
+    std::string debug_event_queue() const;
 
-    std::ostream& debug_entities(std::ostream& os) const;
-    std::ostream& debug_systems(std::ostream& os) const;
-    std::ostream& debug_global(std::ostream& os) const;
-    std::ostream& debug_event_queue(std::ostream& os) const;
-
-    void debug_all(std::ostream& os) const;
+    std::string debug_all(bool include_inactive=false) const;
 
     //
     // information
@@ -449,6 +444,20 @@ private:
         // }}}
     }
 
+    template <typename Obj>
+    std::string debug_object(Obj const& obj) const {
+        // {{{ ...
+        // TODO - use ['...'] when there is an invalid character
+        std::string s = type_name<Obj>() + " = ";
+        if constexpr(has_ostream_method<Obj>::value)
+            s += obj;
+        else
+            s += "{}";
+        s += ", ";
+        return s;
+        // }}}
+    }
+
     // }}}
 
     // {{{ private members
@@ -549,6 +558,56 @@ ENGINE::remove_entity(EntityOrName const& ent)
 
     // remove from _debugging_info
     _debugging_info.erase(id);
+}
+
+//
+// DEBUGGING
+//
+TEMPLATE std::string
+ENGINE::debug_entity(EntityOrName const& ent) const
+{
+    std::string s = "{ ";
+    ((s += has_component<Components>(ent) ? debug_object<Components>(component<Components>(ent)) : ""), ...);
+    return s + "}";
+}
+
+TEMPLATE std::string
+ENGINE::debug_entities(bool include_inactive) const
+{
+    std::vector<Entity> ents;
+    for (auto const& [ent, active] : _entities) {
+        if (include_inactive || active)
+            ents.push_back(ent);
+    }
+    std::sort(ents.begin(), ents.end());
+
+    std::string s = "{\n";
+    for (auto const& ent : ents) {
+        s += std::string("   [");
+        s += std::to_string(ent.get());    // TODO - add name
+        s += "] = " + debug_entity(ent) + ",\n";
+    }
+    return s + "}";
+}
+
+TEMPLATE std::string
+ENGINE::debug_systems() const
+{
+}
+
+TEMPLATE std::string
+ENGINE::debug_global() const
+{
+}
+
+TEMPLATE std::string
+ENGINE::debug_event_queue() const
+{
+}
+
+TEMPLATE std::string
+ENGINE::debug_all(bool include_inactive) const
+{
 }
 
 

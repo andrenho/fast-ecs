@@ -1,6 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
+#include <iostream>
 #include <string>
 #include <variant>
 #include <vector>
@@ -289,6 +290,42 @@ TEST_CASE("events") {
     e.clear_queue();
     CHECK(e.event_queue<EventTypeA>().empty());
     CHECK(e.event_queue<EventTypeB>().empty());
+
+    // }}}
+}
+
+TEST_CASE("debugging") {
+    // {{{ ...
+
+    class System {
+    public:
+        virtual ~System() {}
+    };
+
+    struct Global {
+        int x = 42;
+    };
+
+    struct EventTypeA { size_t id; };
+    struct EventTypeB { string abc; };
+    using Event = variant<EventTypeA, EventTypeB>;
+
+    struct A { int x; };
+    struct B { string y; };
+
+    using MyEngine = Engine<System, Global, Event, A, B>;
+    MyEngine e;
+
+    Entity id = e.add_entity();
+    e.add_component<A>(id, 24);
+    e.add_component<B>(id, "hello");
+
+    e.add_entity("myent");
+    e.add_component<A>("myent", 24);
+
+    SUBCASE("debug") {
+        cout << e.debug_entities() << "\n";
+    }
 
     // }}}
 }
