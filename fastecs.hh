@@ -470,15 +470,16 @@ private:
 
     // {{{ private members
 
+    Global                               _global              {};
+
+    std::vector<std::shared_ptr<System>> _systems             {};
+    std::vector<Event>                   _events              {};
+
     std::map<Entity, bool>               _entities            {};
     ComponentTupleVector                 _components_active   {},
                                          _components_inactive {};
     std::map<std::string, Entity>        _named_entities      {};
     std::map<Entity, std::string>        _debugging_info      {};
-
-    std::vector<std::shared_ptr<System>> _systems             {};
-    Global                               _global              {};
-    std::vector<Event>                   _events              {};
 
     size_t                               _next_entity_id      = 0;
 
