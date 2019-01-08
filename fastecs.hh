@@ -58,6 +58,9 @@ template <typename System, typename Global, typename Event, typename... Componen
 class Engine {
 public:
 
+    template <typename... P>
+    explicit Engine(P&& ...pars) : _global(Global { pars... }) {}
+
     //
     // entities
     //
@@ -376,7 +379,6 @@ private:
     using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
     static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
 
-    static_assert(std::is_default_constructible<Global>::value, "Global must be default constructible.");
     static_assert((std::is_copy_constructible<Components>::value, ...), "All components must be copyable.");
 
     template <typename>      struct is_std_variant : std::false_type {};

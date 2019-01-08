@@ -249,16 +249,16 @@ Globals can be used for an unique piece of information that is shared between
 all system. The global type is set on the engine initialization, and it can
 be replaced by `ecs::NoGlobal` if it is not used.
 
-If used, the type need to be default constructible, and it is initialized along
-with the engine.
+The Global is initialized along with the engine. If parameters are given to
+the engine constructure, these parameters are passed to the Global constructor.
 
 ```C++
 struct GlobalData {
-    int x = 42;
+    int x;
 };
 
 using MyEngine = ecs::Engine<class System, GlobalData, ecs::NoQueue, MyComponent>;
-MyEngine e;
+MyEngine e(42);
 
 std::cout << e.global().x << "\n";    // result: 42
 e.global().x = 8;
