@@ -67,6 +67,23 @@ public:
 
     Entity                     add_entity(std::optional<std::string> const& name = {});
 
+    Entity                     entity(EntityOrName const& ent) const {
+        // {{{ ...
+        if (auto s = std::get_if<std::string>(&ent)) {
+            try {
+                return _named_entities.at(*s);
+            } catch (std::out_of_range&) {
+                throw ECSError(std::string("Entity '") + *s + "' was not found.");
+            }
+        } else {
+            Entity entity = std::get<Entity>(ent);
+            if (_entities.find(entity) == _entities.end())
+                throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
+            return entity;
+        }
+        // }}}
+    }
+
     bool                       is_entity_active(EntityOrName const& ent) const;
     void                       set_entity_active(EntityOrName const& ent, bool active);
 
@@ -405,23 +422,6 @@ private:
     
     // {{{ private methods
     
-    Entity entity(EntityOrName const& ent) const {
-        // {{{ ...
-        if (auto s = std::get_if<std::string>(&ent)) {
-            try {
-                return _named_entities.at(*s);
-            } catch (std::out_of_range&) {
-                throw ECSError(std::string("Entity '") + *s + "' was not found.");
-            }
-        } else {
-            Entity entity = std::get<Entity>(ent);
-            if (_entities.find(entity) == _entities.end())
-                throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
-            return entity;
-        }
-        // }}}
-    }
-
     template <typename C>
     std::vector<std::pair<Entity, C>>& comp_vec(bool active) {
         return std::get<std::vector<std::pair<Entity, C>>>(active ? _components_active : _components_inactive);

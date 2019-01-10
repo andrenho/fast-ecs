@@ -135,8 +135,10 @@ A name can be given to the entity. This is useful for one-of-a-kind entites. All
 can be referred using this name, such as:
 
 ```C++
-e.add_entity("myname");
+e.add_entity("my_name");
 e.remove_entity("my_name");
+
+ecs::Entity entity_id = e.entity("my_name);
 ```
 
 The library also provides a entity called `ecs::InvalidEntity`, that can be used to represent
