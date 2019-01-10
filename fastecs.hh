@@ -99,6 +99,8 @@ public:
     template <typename C>
     C&       add_component(EntityOrName const& ent, C&& c) {
         // {{{ ...
+        check_component<C>();
+
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -151,6 +153,8 @@ public:
     template <typename C>
     C const* component_ptr(EntityOrName const& ent) const {
         // {{{ ...
+        check_component<C>();
+
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -164,6 +168,8 @@ public:
     template <typename C>
     void     remove_component(EntityOrName const& ent) {
         // {{{ ...
+        check_component<C>();
+
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -190,6 +196,7 @@ public:
     template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) {
         // {{{ ...
+        ((check_component<C>(), ...));
 
         auto iteration = [&](bool active) {
             // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
@@ -226,6 +233,7 @@ public:
     template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) const {
         // {{{ ...
+        ((check_component<C>(), ...));
 
         auto iteration = [&](bool active) {
             // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
@@ -351,7 +359,12 @@ public:
     }
 
     template <typename C>
-    std::string debug_component(EntityOrName const& ent) const { return "{ " + debug_object<C>(component<C>(ent)) + "}"; }
+    std::string debug_component(EntityOrName const& ent) const {
+        // {{{
+        check_component<C>();
+        return "{ " + debug_object<C>(component<C>(ent)) + "}";
+        // }}}
+    }
 
     std::string debug_entity(EntityOrName const& ent, size_t spaces=0) const;
     std::string debug_entities(bool include_inactive=false, size_t spaces=0) const;
@@ -403,6 +416,12 @@ private:
     static_assert(is_std_variant<Event>::value, "Event must be a std::variant<...>.");
 
 #pragma GCC diagnostic pop
+
+    // check if component is on the list
+    template <typename C>
+    void check_component() const {
+        static_assert((std::is_same_v<C, Components> || ...), "This component is not part of the component list given in the Engine initialization.");
+    }
 
     // check if class has operator<<
     template<typename T>
