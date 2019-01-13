@@ -203,26 +203,32 @@ public:
         ((check_component<C>(), ...));
 
         auto iteration = [&]([[maybe_unused]] bool active) {
-            // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
-            std::tuple<my_iter<C>...> current;
-            ((std::get<my_iter<C>>(current) = comp_vec<C>(active).begin()), ...);
-            
-            // while none of the iterators reached end
-            while (((std::get<my_iter<C>>(current) != comp_vec<C>(active).end()) || ...)) {
-                // find iterator that is more advanced
-                std::vector<Entity> entities1 { std::get<my_iter<C>>(current)->first... };
-                [[maybe_unused]] Entity last = *std::max_element(entities1.begin(), entities1.end());
+            if constexpr (sizeof...(C) == 0) {
+                for (auto [ent, ac] : _entities)
+                    if (ac == active)
+                        user_function(*this, ent);
+            } else {
+                // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+                std::tuple<my_iter<C>...> current;
+                ((std::get<my_iter<C>>(current) = comp_vec<C>(active).begin()), ...);
+                
+                // while none of the iterators reached end
+                while (((std::get<my_iter<C>>(current) != comp_vec<C>(active).end()) || ...)) {
+                    // find iterator that is more advanced
+                    std::vector<Entity> entities1 { std::get<my_iter<C>>(current)->first... };
+                    [[maybe_unused]] Entity last = *std::max_element(entities1.begin(), entities1.end());
 
-                // advance all iterators that are behind the latest one
-                (((std::get<my_iter<C>>(current)->first < last) ? std::get<my_iter<C>>(current)++ : std::get<my_iter<C>>(current)), ...);
-                if (((std::get<my_iter<C>>(current) == comp_vec<C>(active).end()) || ...))
-                    break;
+                    // advance all iterators that are behind the latest one
+                    (((std::get<my_iter<C>>(current)->first < last) ? std::get<my_iter<C>>(current)++ : std::get<my_iter<C>>(current)), ...);
+                    if (((std::get<my_iter<C>>(current) == comp_vec<C>(active).end()) || ...))
+                        break;
 
-                // if all iterators are equal, call user function and advance all iterators
-                std::vector<Entity> entities2 { std::get<my_iter<C>>(current)->first... };
-                if (std::adjacent_find(entities2.begin(), entities2.end(), std::not_equal_to<Entity>()) == entities2.end()) {
-                    user_function(*this, entities2.at(0), std::get<my_iter<C>>(current)->second...);
-                    (std::get<my_iter<C>>(current)++, ...);
+                    // if all iterators are equal, call user function and advance all iterators
+                    std::vector<Entity> entities2 { std::get<my_iter<C>>(current)->first... };
+                    if (std::adjacent_find(entities2.begin(), entities2.end(), std::not_equal_to<Entity>()) == entities2.end()) {
+                        user_function(*this, entities2.at(0), std::get<my_iter<C>>(current)->second...);
+                        (std::get<my_iter<C>>(current)++, ...);
+                    }
                 }
             }
         };
@@ -240,26 +246,32 @@ public:
         ((check_component<C>(), ...));
 
         auto iteration = [&]([[maybe_unused]] bool active) {
-            // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
-            std::tuple<my_citer<C>...> current;
-            ((std::get<my_citer<C>>(current) = comp_vec<C>(active).cbegin()), ...);
-            
-            // while none of the iterators reached end
-            while (((std::get<my_citer<C>>(current) != comp_vec<C>(active).cend()) || ...)) {
-                // find iterator that is more advanced
-                std::vector<Entity> entities1 { std::get<my_citer<C>>(current)->first... };
-                [[maybe_unused]] Entity last = *std::max_element(entities1.cbegin(), entities1.cend());
+            if constexpr (sizeof...(C) == 0) {
+                for (auto [ent, ac] : _entities)
+                    if (ac == active)
+                        user_function(*this, ent);
+            } else {
+                // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+                std::tuple<my_citer<C>...> current;
+                ((std::get<my_citer<C>>(current) = comp_vec<C>(active).cbegin()), ...);
+                
+                // while none of the iterators reached end
+                while (((std::get<my_citer<C>>(current) != comp_vec<C>(active).cend()) || ...)) {
+                    // find iterator that is more advanced
+                    std::vector<Entity> entities1 { std::get<my_citer<C>>(current)->first... };
+                    [[maybe_unused]] Entity last = *std::max_element(entities1.cbegin(), entities1.cend());
 
-                // advance all iterators that are behind the latest one
-                (((std::get<my_citer<C>>(current)->first < last) ? std::get<my_citer<C>>(current)++ : std::get<my_citer<C>>(current)), ...);
-                if (((std::get<my_citer<C>>(current) == comp_vec<C>(active).cend()) || ...))
-                    break;
+                    // advance all iterators that are behind the latest one
+                    (((std::get<my_citer<C>>(current)->first < last) ? std::get<my_citer<C>>(current)++ : std::get<my_citer<C>>(current)), ...);
+                    if (((std::get<my_citer<C>>(current) == comp_vec<C>(active).cend()) || ...))
+                        break;
 
-                // if all iterators are equal, call user function and advance all iterators
-                std::vector<Entity> entities2 { std::get<my_citer<C>>(current)->first... };
-                if (std::adjacent_find(entities2.cbegin(), entities2.cend(), std::not_equal_to<Entity>()) == entities2.cend()) {
-                    user_function(*this, entities2.at(0), std::get<my_citer<C>>(current)->second...);
-                    (std::get<my_citer<C>>(current)++, ...);
+                    // if all iterators are equal, call user function and advance all iterators
+                    std::vector<Entity> entities2 { std::get<my_citer<C>>(current)->first... };
+                    if (std::adjacent_find(entities2.cbegin(), entities2.cend(), std::not_equal_to<Entity>()) == entities2.cend()) {
+                        user_function(*this, entities2.at(0), std::get<my_citer<C>>(current)->second...);
+                        (std::get<my_citer<C>>(current)++, ...);
+                    }
                 }
             }
         };

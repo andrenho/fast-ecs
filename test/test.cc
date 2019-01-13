@@ -133,6 +133,14 @@ TEST_CASE("iteration") {
     e.add_component<A>(id2, 43);
     e.add_component<B>(id3, "world");
 
+    SUBCASE("iterating with no components") {
+        int count = 0;
+        e.for_each([&count](MyEngine&, Entity const&) {
+            ++count;
+        });
+        CHECK(count == 3);
+    }
+
     SUBCASE("iterate one component") {
         int sum = 0;
         e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) {

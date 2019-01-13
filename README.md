@@ -196,6 +196,11 @@ e.for_each<Position, Direction>([](MyEngine& e, ecs::Entity const& ent, Position
 e.for_each<Position, Direction>([](MyEngine const& e, ecs::Entity const& ent, Position const& pos, Direction const& dir) {
     // do something
 });
+
+// Iterate over all entities
+e.for_each([](MyEngine& e, ecs::Entity const& ent) {
+    // do something
+});
 ```
 
 The `for_each` function is the central piece of this ECS library, and a lot of care has been taken
