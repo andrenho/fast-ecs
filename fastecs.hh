@@ -1,6 +1,10 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#if __cplusplus < 201703L
+#error "A compiler with C++17 support is required."
+#endif
+
 #include <algorithm>
 #include <limits>
 #include <map>
