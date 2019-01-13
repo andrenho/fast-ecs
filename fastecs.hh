@@ -62,11 +62,31 @@ template <typename System, typename Global, typename Event, typename... Componen
 class Engine {
 public:
 
+    template <typename... P>
+    explicit Engine(P&& ...pars) : _global(Global { pars... }) {}
+
     //
     // entities
     //
 
     Entity                     add_entity(std::optional<std::string> const& name = {});
+
+    Entity                     entity(EntityOrName const& ent) const {
+        // {{{ ...
+        if (auto s = std::get_if<std::string>(&ent)) {
+            try {
+                return _named_entities.at(*s);
+            } catch (std::out_of_range&) {
+                throw ECSError(std::string("Entity '") + *s + "' was not found.");
+            }
+        } else {
+            Entity entity = std::get<Entity>(ent);
+            if (_entities.find(entity) == _entities.end())
+                throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
+            return entity;
+        }
+        // }}}
+    }
 
     bool                       is_entity_active(EntityOrName const& ent) const;
     void                       set_entity_active(EntityOrName const& ent, bool active);
@@ -83,6 +103,8 @@ public:
     template <typename C>
     C&       add_component(EntityOrName const& ent, C&& c) {
         // {{{ ...
+        check_component<C>();
+
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -135,6 +157,8 @@ public:
     template <typename C>
     C const* component_ptr(EntityOrName const& ent) const {
         // {{{ ...
+        check_component<C>();
+
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -148,6 +172,8 @@ public:
     template <typename C>
     void     remove_component(EntityOrName const& ent) {
         // {{{ ...
+        check_component<C>();
+
         Entity id = entity(ent);
         auto& vec = comp_vec<C>(_entities.at(id));
         auto it = std::lower_bound(begin(vec), end(vec), id,
@@ -174,6 +200,7 @@ public:
     template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) {
         // {{{ ...
+        ((check_component<C>(), ...));
 
         auto iteration = [&](bool active) {
             // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
@@ -210,6 +237,7 @@ public:
     template<typename... C, typename F>
     void     for_each(F user_function, bool include_inactive=false) const {
         // {{{ ...
+        ((check_component<C>(), ...));
 
         auto iteration = [&](bool active) {
             // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
@@ -335,7 +363,12 @@ public:
     }
 
     template <typename C>
-    std::string debug_component(EntityOrName const& ent) const { return "{ " + debug_object<C>(component<C>(ent)) + "}"; }
+    std::string debug_component(EntityOrName const& ent) const {
+        // {{{
+        check_component<C>();
+        return "{ " + debug_object<C>(component<C>(ent)) + "}";
+        // }}}
+    }
 
     std::string debug_entity(EntityOrName const& ent, size_t spaces=0) const;
     std::string debug_entities(bool include_inactive=false, size_t spaces=0) const;
@@ -380,7 +413,6 @@ private:
     using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
     static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
 
-    static_assert(std::is_default_constructible<Global>::value, "Global must be default constructible.");
     static_assert((std::is_copy_constructible<Components>::value, ...), "All components must be copyable.");
 
     template <typename>      struct is_std_variant : std::false_type {};
@@ -388,6 +420,12 @@ private:
     static_assert(is_std_variant<Event>::value, "Event must be a std::variant<...>.");
 
 #pragma GCC diagnostic pop
+
+    // check if component is on the list
+    template <typename C>
+    void check_component() const {
+        static_assert((std::is_same_v<C, Components> || ...), "This component is not part of the component list given in the Engine initialization.");
+    }
 
     // check if class has operator<<
     template<typename T>
@@ -407,23 +445,6 @@ private:
     
     // {{{ private methods
     
-    Entity entity(EntityOrName const& ent) const {
-        // {{{ ...
-        if (auto s = std::get_if<std::string>(&ent)) {
-            try {
-                return _named_entities.at(*s);
-            } catch (std::out_of_range&) {
-                throw ECSError(std::string("Entity '") + *s + "' was not found.");
-            }
-        } else {
-            Entity entity = std::get<Entity>(ent);
-            if (_entities.find(entity) == _entities.end())
-                throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
-            return entity;
-        }
-        // }}}
-    }
-
     template <typename C>
     std::vector<std::pair<Entity, C>>& comp_vec(bool active) {
         return std::get<std::vector<std::pair<Entity, C>>>(active ? _components_active : _components_inactive);

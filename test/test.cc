@@ -367,4 +367,6 @@ struct D { D(D const&) = delete; };
 
 // Engine<NoSystem, NoGlobal, int, A> e3;
 
+// int test() { Engine<NoSystem, NoGlobal, NoEventQueue, A> e; e.add_component<B>(ecs::Entity { 0 }); };
+
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
