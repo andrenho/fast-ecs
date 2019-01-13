@@ -202,7 +202,7 @@ public:
         // {{{ ...
         ((check_component<C>(), ...));
 
-        auto iteration = [&](bool active) {
+        auto iteration = [&]([[maybe_unused]] bool active) {
             // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
             std::tuple<my_iter<C>...> current;
             ((std::get<my_iter<C>>(current) = comp_vec<C>(active).begin()), ...);
@@ -239,7 +239,7 @@ public:
         // {{{ ...
         ((check_component<C>(), ...));
 
-        auto iteration = [&](bool active) {
+        auto iteration = [&]([[maybe_unused]] bool active) {
             // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
             std::tuple<my_citer<C>...> current;
             ((std::get<my_citer<C>>(current) = comp_vec<C>(active).cbegin()), ...);
