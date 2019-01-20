@@ -81,6 +81,8 @@ public:
             }
         } else {
             Entity entity = std::get<Entity>(ent);
+            if (entity == InvalidEntity)
+                throw ECSError("Reference to an invalid entity.");
             if (_entities.find(entity) == _entities.end())
                 throw ECSError(std::string("Entity ") + std::to_string(entity.get()) + " was not found.");
             return entity;
