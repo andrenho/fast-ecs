@@ -162,7 +162,13 @@ struct Polygon {
 };
 ```
 
+Components need to be copyable.
+
 Avoid using pointers in components, as it defeats the porpouse of the high speed array of this library.
+However, there are occasions where pointers are necessary - for example, when using an underlying 
+C library or inheritance. In this cases, since components need to be copyable, it is recommended to use
+`shared_ptr` instead of `unique_ptr` (obviously, never use naked pointers). A `unique_ptr` can be used,
+but in the cases all constructors (move, copy and assignment) need to be provided.
 
 Also, remember that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their identifier (`ecs::Entity`) or name (`std::string`).
 
@@ -357,3 +363,16 @@ size_t number_of_event_types();
 size_t number_of_systems();
 size_t event_queue_size();
 ```
+
+# Destruction order
+
+The library is destructed in the following order:
+
+1. Components
+2. Event queue
+3. Systems
+4. Global
+
+This means that, if a library you are using is in a system or in global, and the components
+contain the elements of the library, the elements are guaranteed to be destrcted before the
+library.
