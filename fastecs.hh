@@ -219,7 +219,7 @@ public:
                 ((std::get<my_iter<C>>(current) = comp_vec<C>(active).begin()), ...);
                 
                 // while none of the iterators reached end
-                while (((std::get<my_iter<C>>(current) != comp_vec<C>(active).end()) || ...)) {
+                while (((std::get<my_iter<C>>(current) != comp_vec<C>(active).end()) && ...)) {
                     // find iterator that is more advanced
                     std::vector<Entity> entities1 { std::get<my_iter<C>>(current)->first... };
                     [[maybe_unused]] Entity last = *std::max_element(entities1.begin(), entities1.end());
@@ -266,7 +266,7 @@ public:
                 ((std::get<my_citer<C>>(current) = comp_vec<C>(active).cbegin()), ...);
                 
                 // while none of the iterators reached end
-                while (((std::get<my_citer<C>>(current) != comp_vec<C>(active).cend()) || ...)) {
+                while (((std::get<my_citer<C>>(current) != comp_vec<C>(active).cend()) && ...)) {
                     // find iterator that is more advanced
                     std::vector<Entity> entities1 { std::get<my_citer<C>>(current)->first... };
                     [[maybe_unused]] Entity last = *std::max_element(entities1.cbegin(), entities1.cend());
