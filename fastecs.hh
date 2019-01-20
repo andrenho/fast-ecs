@@ -210,6 +210,10 @@ public:
                     if (ac == active)
                         user_function(*this, ent);
             } else {
+                // skip if any component vectors is empty
+                if ((comp_vec<C>(active).empty() || ...))
+                    return;
+
                 // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
                 std::tuple<my_iter<C>...> current;
                 ((std::get<my_iter<C>>(current) = comp_vec<C>(active).begin()), ...);
@@ -253,6 +257,10 @@ public:
                     if (ac == active)
                         user_function(*this, ent);
             } else {
+                // skip if any component vectors is empty
+                if ((comp_vec<C>(active).empty() || ...))
+                    return;
+
                 // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
                 std::tuple<my_citer<C>...> current;
                 ((std::get<my_citer<C>>(current) = comp_vec<C>(active).cbegin()), ...);
