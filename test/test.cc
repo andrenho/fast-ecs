@@ -1,56 +1,62 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
-#include <iostream>
-#include <string>
-#include <variant>
-#include <vector>
-
 #include "fastecs.hh"
 
 using namespace std;
 using namespace ecs;
 
+// {{{ helper structs
+
+struct Position {
+    double x, y;
+};
+
+struct Direction {
+    std::string dir;
+};
+
+// }}}
+
 TEST_CASE("entities") { 
     // {{{...
+
+    enum class Pool { My };
     
     struct C {};
-    Engine<NoSystem, NoGlobal, NoEventQueue, C> e;
+    ECS<NoGlobal, NoEventQueue, Pool, C> ecs(Threading::Single);
 
-    CHECK(e.number_of_entities() == 0);
+    CHECK(ecs.number_of_entities() == 0);
 
-    Entity id = e.add_entity();
-    CHECK(id.get() == 0);
-    CHECK(e.number_of_entities() == 1);
+    Entity e1 = ecs.add();
+    CHECK(e1.id == 0);
+    CHECK(ecs.number_of_entities() == 1);
 
-    Entity id2 = e.add_entity("test");
-    CHECK(id2.get() == 1);
-    CHECK(e.number_of_entities() == 2);
+    Entity e2 = ecs.add();
+    Entity e3 = ecs.add(Pool::My);
 
-    SUBCASE("entity active")  {
-        CHECK(e.is_entity_active("test"));
-        e.set_entity_active("test", false);
-        CHECK(!e.is_entity_active(id2));
-        CHECK(!e.is_entity_active("test"));
-        CHECK(e.is_entity_active(id));
+    size_t count = 0;
+    for (Entity const& e : ecs.entities()) {
+        CHECK((e == e1 || e == e2 || e == e3));
+        ++count;
     }
+    CHECK(count == 3);
 
-    SUBCASE("debugging info") {
-        e.set_entity_debugging_info(id, "debugging_info");
-        CHECK(e.entity_debugging_info(id).value() == "debugging_info");
-        CHECK(!e.entity_debugging_info(id2));
+    count = 0;
+    for (Entity const& e : ecs.entities(Pool::My)) {
+        CHECK((e != e1 && e != e2 && e == e3));
+        ++count;
     }
+    CHECK(count == 1);
 
-    SUBCASE("remove entity") {
-        e.remove_entity(id);
-        CHECK(e.number_of_entities() == 1);
+    ecs.remove(e1);
 
-        CHECK_THROWS(e.is_entity_active(id));
-        CHECK_THROWS(e.set_entity_active(id, false));
-        CHECK_THROWS(e.set_entity_debugging_info(id, ""));
-        CHECK_THROWS(e.entity_debugging_info(id));
-        CHECK_THROWS(e.remove_entity(id));
+    count = 0;
+    for (Entity const& e : ecs.entities()) {
+        CHECK((e != e1 && (e == e2 || e == e3)));
+        ++count;
     }
+    CHECK(count == 2);
 
     // }}}
 }
@@ -58,207 +64,89 @@ TEST_CASE("entities") {
 TEST_CASE("components") {
     // {{{ ...
 
-    struct A { int x; };
-    struct B { string y; };
+    ECS<NoGlobal, NoEventQueue, NoPool, Position, Direction> ecs(Threading::Single);
 
-    Engine<NoSystem, NoGlobal, NoEventQueue, A, B> e;
-    Entity id = e.add_entity(),
-           id2 = e.add_entity(),
-           id3 = e.add_entity(),
-           id4 = e.add_entity();
+    // set component
+    Entity e1 = ecs.add();
+    e1.add<Position>(4, 5);
+    e1.add<Direction>("N");
+    CHECK(e1.get<Position>().x == 4);
+    CHECK(e1.get<Position>().y == 5);
 
-    A& a = e.add_component<A>(id, 42);
-    CHECK(a.x == 42);
-    e.add_component<B>(id, "hello");
-    CHECK(e.add_component<A>(id3, 44).x == 44);
-    CHECK(e.add_component<A>(id2, 43).x == 43);
+    // set component values
+    e1.get<Position>().y = 10;
+    CHECK(e1.get<Position>().y == 10);
 
-    SUBCASE("add component") {
-        CHECK_THROWS(e.add_component<A>(id, 43));
+    // set component values (pointer)
+    e1.get_ptr<Position>()->y = 20;
+    CHECK(e1.get_ptr<Position>()->y == 20);
 
-        CHECK(e.components_are_sorted<A>());
-    }
+    // has component
+    Entity e2 = ecs.add();
+    CHECK(e1.has<Position>());
+    CHECK(!e2.has<Position>());
 
-    SUBCASE("component_ptr") {
-        CHECK(e.component_ptr<A>(id)->x == 42);
-        CHECK(e.component_ptr<A>(id2)->x == 43);
-        CHECK(e.component_ptr<A>(id3)->x == 44);
+    // remove component
+    e1.remove<Position>();
+    CHECK(!e1.has<Position>());
 
-        CHECK(!e.component_ptr<A>(id4));
-    }
-
-    SUBCASE("component / has_component") {
-        CHECK(e.has_component<A>(id));
-        CHECK(e.component<A>(id).x == 42);
-        CHECK(!e.has_component<A>(id4));
-        CHECK_THROWS(e.component<A>(id4));
-    }
-
-    SUBCASE("is string still valid?") {
-        CHECK(e.component<B>(id).y == "hello");
-    }
-
-    SUBCASE("remove component") {
-        e.remove_component<A>(id);
-        CHECK_THROWS(e.remove_component<A>(id));
-        CHECK(e.component<B>(id).y == "hello");
-        CHECK(e.component<A>(id2).x == 43);
-        CHECK_THROWS(e.component<A>(id));
-    }
-    
-    SUBCASE("remove entity") {
-        e.remove_entity(id);
-        CHECK_THROWS(e.component<A>(id));
-        CHECK_THROWS(e.component<B>(id));
-    }
+    // remove entity
+    ecs.remove(e1);
+    CHECK_THROWS(e1.get<Position>());
 
     // }}}
 }
 
-TEST_CASE("iteration") {
+TEST_CASE("iterate components") {
     // {{{ ...
 
-    struct A { int x; };
-    struct B { string y; };
+    enum class Pool { My };
+    ECS<NoGlobal, NoEventQueue, Pool, Position, Direction> ecs(Threading::Single);
 
-    using MyEngine = Engine<NoSystem, NoGlobal, NoEventQueue, A, B>;
-    MyEngine e;
-    Entity id = e.add_entity();
-
-    e.add_component<A>(id, 42);
-    e.add_component<B>(id, "hello");
-
-    Entity id2 = e.add_entity(),
-           id3 = e.add_entity();
-    e.add_component<A>(id2, 43);
-    e.add_component<B>(id3, "world");
-
-    SUBCASE("iterating with no components") {
-        int count = 0;
-        e.for_each([&count](MyEngine&, Entity const&) {
-            ++count;
-        });
-        CHECK(count == 3);
-    }
-
-    SUBCASE("iterate one component") {
-        int sum = 0;
-        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) {
-            sum += a.x;
-        });
-        CHECK(sum == (42 + 43));
-
-        std::string s;
-
-        e.for_each<B>([&s](MyEngine&, Entity const&, B& b) {
-            s += b.y;
-        });
-        CHECK(s == "helloworld");
-    }
-
-    SUBCASE("itereate more than one compoenent") {
-        std::string s = "";
-        int sum = 0;
-        e.for_each<A, B>([&sum, &s](MyEngine&, Entity const&, A& a, B& b) {
-            sum += a.x;
-            s += b.y;
-        });
-        CHECK(sum == 42);
-        CHECK(s == "hello");
-    }
-
-    SUBCASE("const iteration") {
-        MyEngine const& ce = e;
-        std::string s = "";
-        int sum = 0;
-        ce.for_each<A, B>([&sum, &s](MyEngine const&, Entity const&, A const& a, B const& b) {
-            sum += a.x;
-            s += b.y;
-        });
-        CHECK(sum == 42);
-        CHECK(s == "hello");
-    }
-
-    SUBCASE("activate/deactivate") {
-        int sum = 0;
-        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; });
-        CHECK(sum == (42 + 43));
-
-        e.set_entity_active(id, false);
-        sum = 0;
-        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; });
-        CHECK(sum == 43);
-
-        sum = 0;
-        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; }, true);
-        CHECK(sum == (42 + 43));
-
-        e.set_entity_active(id, true);
-        sum = 0;
-        e.for_each<A>([&sum](MyEngine&, Entity const&, A& a) { sum += a.x; });
-        CHECK(sum == (42 + 43));
-    }
-
-    // }}}
-}
-
-TEST_CASE("engine copyable") {
-    // {{{ ...
-
-    struct A { int x; };
-    struct B { string y; };
-
-    using MyEngine = Engine<NoSystem, NoGlobal, NoEventQueue, A, B>;
-    MyEngine e;
-    Entity id = e.add_entity();
-
-    e.add_component<A>(id, 42);
-    e.add_component<B>(id, "hello");
-
-    MyEngine b = e;
+    Entity e1 = ecs.add();
+    e1.add<Position>(34, 10);
+    e1.add<Direction>("N");
     
-    SUBCASE("copy successful") {
-        CHECK(b.component<A>(id).x == 42);
-        CHECK(b.component<B>(id).y == "hello");
+    Entity e2 = ecs.add(Pool::My);
+    e2.add<Position>(12, 20);
+
+    size_t count = 0;
+    for (Entity& e : ecs.entities<Position>()) {
+        CHECK((e == e1 || e == e2));
+        ++count;
     }
+    CHECK(count == 2);
 
-    // }}}
-}
-
-TEST_CASE("systems") {
-    // {{{ ...
-    class System {
-    public:
-        virtual ~System() {}
-    };
-
-    struct C {};
-    using MyEngine = Engine<System, NoGlobal, NoEventQueue, C>;
-    MyEngine e;
-
-    struct TestSystem : public System {
-        TestSystem(int i) : i(i) {}
-        void Execute(MyEngine&) { CHECK(i == 2); }
-        int i;
-    };
-
-    SUBCASE("add system") {   
-        e.add_system<TestSystem>(2);
-        CHECK(e.system<TestSystem>().i == 2);
-        CHECK(e.systems().size() == 1); 
-        CHECK_THROWS(e.add_system<TestSystem>(2));
+    count = 0;
+    for (Entity& e : ecs.entities<Position>(Pool::My)) {
+        CHECK(e == e2);
+        ++count;
     }
+    CHECK(count == 1);
+
+    count = 0;
+    for (Entity& e : ecs.entities<Position, Direction>()) {
+        CHECK(e == e1);
+        ++count;
+    }
+    CHECK(count == 2);
+
+    // const iteration
+    const ECS ecs_const = ecs;
     
-    SUBCASE("remove system") {
-        e.remove_system<TestSystem>();
-        CHECK(e.systems().size() == 0); 
-        CHECK_NOTHROW(e.add_system<TestSystem>(2));
+    count = 0;
+    for (Entity const& e : ecs_const.entities<Position>(Pool::My)) {
+        CHECK(e == e2);
+        ++count;
     }
+    CHECK(count == 1);
+    
+    //for (Entity& e : ecs_const.entities<Position>(Pool::My)) {}   // will give an error
 
     // }}}
 }
 
-TEST_CASE("global") {
+TEST_CASE("globals") {
     // {{{ ...
 
     struct Global {
@@ -266,115 +154,158 @@ TEST_CASE("global") {
     };
 
     struct C {};
-    using MyEngine = Engine<NoSystem, Global, NoEventQueue, C>;
-    MyEngine e;
+    ECS<Global, NoEventQueue, NoPool, C> ecs(Threading::Single);
 
-    CHECK(e.global().x == 42);
-    e.global().x = 24;
-    CHECK(e.global().x == 24);
+    CHECK(ecs().x == 42);
+    ecs().x = 24;
+    CHECK(ecs().x == 24);
 
     // }}}
 }
 
-TEST_CASE("events") {
+TEST_CASE("messages") {
     // {{{ ...
-
     struct EventTypeA { size_t id; };
     struct EventTypeB { string abc; };
     using Event = variant<EventTypeA, EventTypeB>;
 
     struct C {};
-    using MyEngine = Engine<NoSystem, NoGlobal, Event, C>;
-    MyEngine e;
+    ECS<NoGlobal, Event, NoPool, C> ecs(Threading::Single);
 
-    e.send_event(EventTypeA { 12 });
-    e.send_event(EventTypeA { 24 });
-    e.send_event(EventTypeB { "Hello" });
-    CHECK(e.event_queue<EventTypeA>().size() == 2);
-    CHECK(e.event_queue<EventTypeA>().at(0).id == 12);
-    CHECK(e.event_queue<EventTypeA>().at(1).id == 24);
-    CHECK(e.event_queue<EventTypeA>().at(1).id == 24);
-    CHECK(e.event_queue<EventTypeB>().at(0).abc == "Hello");
-    e.clear_queue();
-    CHECK(e.event_queue<EventTypeA>().empty());
-    CHECK(e.event_queue<EventTypeB>().empty());
+    ecs.add_message(EventTypeA { 12 });
+    ecs.add_message(EventTypeA { 24 });
+    ecs.add_message(EventTypeB { "Hello" });
+    CHECK(ecs.messages<EventTypeA>().size() == 2);
+    CHECK(ecs.messages<EventTypeA>().at(0).id == 12);
+    CHECK(ecs.messages<EventTypeA>().at(1).id == 24);
+    CHECK(ecs.messages<EventTypeA>().at(1).id == 24);
+    CHECK(ecs.messages<EventTypeB>().at(0).abc == "Hello");
 
+    ecs.clear_messages();
+    CHECK(ecs.messages<EventTypeA>().empty());
+    CHECK(ecs.messages<EventTypeB>().empty());
     // }}}
 }
 
-class System {
-public:
-    virtual ~System() {}
-};
+struct C { int value = 0; };
+using MyECS = ECS<NoGlobal, NoEventQueue, NoPool, C>;
 
-struct TestSystem : public System {
-    TestSystem(int i) : i(i) {}
-    int i;
-};
+void my_add(MyECS const& ecs, int& x) {
+    ++x;
+}
 
-struct Global {
-    int x = 42;
-};
-inline ostream& operator<<(ostream& os, Global const& g) { os << "x = " << g.x; return os; }
-
-struct EventTypeA { size_t id; };
-struct EventTypeB { string abc; };
-using Event = variant<EventTypeA, EventTypeB>;
-
-struct A { 
-    int x;
-};
-inline ostream& operator<<(ostream& os, A const& a) { os << "x = " << a.x; return os; }
-
-struct B { string y; };
-inline ostream& operator<<(ostream& os, B const& b) { os << "y = '" << b.y << "'"; return os; }
-
-TEST_CASE("debugging") {
+TEST_CASE("systems") {
     // {{{ ...
+    
+    MyECS ecs(Threading::Single);
 
-    using MyEngine = Engine<System, Global, Event, A, B>;
-    MyEngine e;
+    Entity e1 = ecs.add();
+    e1.add<C>();
 
-    Entity id = e.add_entity();
-    e.add_component<A>(id, 24);
-    e.add_component<B>(id, "hello");
+    struct Adder {
+        int x = 0;
 
-    e.add_entity("myent");
-    e.add_component<A>("myent", 24);
-    e.set_entity_debugging_info("myent", "Debugging info");
+        void internal_add(MyECS const& ecs) {
+            ++this->x;
+        }
+    };
 
-    e.add_system<TestSystem>(2);
+    ecs.start_frame();
+    
+    int x = 0;
+    ecs.run_st(my_add, x);
+    CHECK(x == 1);
 
-    e.send_event(EventTypeA { 10 });
-
-    SUBCASE("debug") {
-        cout << e.debug_all() << "\n";
-    }
-
-    SUBCASE("info") {
-        CHECK(e.number_of_entities() == 2);
-        CHECK(e.number_of_components() == 2);
-        CHECK(e.number_of_systems() == 1);
-        CHECK(e.number_of_event_types() == 2);
-        CHECK(e.event_queue_size() == 1);
-
-        Engine<System, Global, NoEventQueue, A, B> e2;
-        CHECK(e2.number_of_event_types() == 0);
-    }
+    Adder adder;
+    ecs.run_st(adder, &Adder::internal_add);
 
     // }}}
 }
 
-// uncomment one of the following commented lines on order to have a static error:
+/*
 
-struct GlobalNDC { GlobalNDC(int) {} };
-// Engine<NoSystem, GlobalNDC, NoEventQueue, A> e1;
+-- {{{ systems
+do
+   ecs:start_frame()
 
-struct D { D(D const&) = delete; };
-// Engine<NoSystem, NoGlobal, NoEventQueue, A, D> e2;
+   -- run singlethreaded
+   local t = { value = 0 }
+   ecs:run_st('adder 1', adder, t)
+   assert(t.value == 1)
 
-// Engine<NoSystem, NoGlobal, int, A> e3;
+   -- check timer
+   assert(ecs:timer()[1].name == 'adder 1')
 
-// int test() { Engine<NoSystem, NoGlobal, NoEventQueue, A> e; e.add_component<B>(ecs::Entity { 0 }); };
+   -- singlethread non-mutable
+   function change_stuff()
+      e1.comp.value = 2
+   end
+   assert_error(function() ecs:run_st('change_stuff', change_stuff) end)
+   assert(e1.comp.value == 1)
+
+   -- multithread
+   function add_wait(t)
+      for i = 1,20 do
+         t.value = t.value + 1
+         love.timer.sleep(0.001)
+      end
+   end
+   local t1 = { value = 0 }
+   local t2 = { value = 0 }
+
+   ECS.multithreaded = false
+
+   ecs:reset_timer()
+   ecs:start_frame()
+   ecs:run_mt('multithread', {
+      { 'wait1', add_wait, t1 },
+      { 'wait2', add_wait, t2 },
+   })
+   ecs:join()
+   assert(t1.value > 0)
+   assert(t2.value > 0)
+
+   local timer = ecs:timer()
+   assert(timer[1].name == 'wait1')
+   assert(timer[1].time > 0)
+   assert(timer[2].name == 'wait2')
+   assert(timer[2].time > 0)
+
+   -- mutable
+   ecs:run_mutable('change_stuff', change_stuff)
+   assert(e1.comp.value == 2)
+end
+
+-- }}}
+
+-- {{{ print components, values
+
+do
+   local ecs = ECS({
+      position = {
+         x = 'number',
+         y = 'number?'
+      },
+      direction = {
+         dir = 'string'
+      }
+   }, false)
+   
+   -- set component
+   local e1 = ecs:add()
+   e1.position = { x = 34, y = 10 }
+   e1.direction = { dir = 'N' }
+
+   p(e1.position)
+   p(e1)
+
+   ecs.test = { hello = 'world' }
+   ecs.value = 42
+   p(ecs)
+end
+
+-- }}}
+
+*/
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
