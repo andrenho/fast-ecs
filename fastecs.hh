@@ -52,10 +52,10 @@ public:
 
 class EntityIterator {
 public:
-    EntityIterator operator++(int);   // TODO
-    Entity& operator*() const;   // TODO
-    friend bool operator==(const EntityIterator&, const EntityIterator&);   // TODO
-    friend bool operator!=(const EntityIterator&, const EntityIterator&);    // TODO
+    EntityIterator operator++(int) {}   // TODO
+    Entity& operator*() const {}   // TODO
+    friend bool operator==(const EntityIterator&, const EntityIterator&) {}   // TODO
+    friend bool operator!=(const EntityIterator&, const EntityIterator&) {}    // TODO
     EntityIterator& operator++() {}   // TODO
     EntityIterator begin() {}   // TODO
     EntityIterator end() {}   // TODO
@@ -63,10 +63,10 @@ public:
 
 class ConstEntityIterator {
 public:
-    ConstEntityIterator operator++(int);   // TODO
-    Entity const& operator*() const;   // TODO
-    friend bool operator==(const ConstEntityIterator&, const ConstEntityIterator&);   // TODO
-    friend bool operator!=(const ConstEntityIterator&, const ConstEntityIterator&);    // TODO
+    ConstEntityIterator operator++(int) {}   // TODO
+    Entity const& operator*() const {}   // TODO
+    friend bool operator==(const ConstEntityIterator&, const ConstEntityIterator&) {}   // TODO
+    friend bool operator!=(const ConstEntityIterator&, const ConstEntityIterator&) {}    // TODO
     ConstEntityIterator& operator++() {}   // TODO
     ConstEntityIterator begin() {}   // TODO
     ConstEntityIterator end() {}   // TODO
