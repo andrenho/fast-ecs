@@ -1,8 +1,12 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
-#include <functional>
+#include <chrono> 
+#include <map>
+#include <string>
 #include <variant>
+#include <thread>
+#include <type_traits>
 
 #if __cplusplus < 201703L
 #error "A compiler with C++17 support is required."
@@ -70,6 +74,8 @@ public:
 
 template <typename Global, typename Event, typename Pool, typename... Components>
 class ECS {
+    using MyECS = ECS<Global, Event, Pool, Components...>;
+
 public:
     template <typename... P>
     explicit ECS(Threading threading, P&& ...pars) : _global(Global { pars... }) {}
@@ -114,7 +120,7 @@ public:
     // messages
     //
 
-    void           add_message(Event&& e) {}  // TODO
+    void           add_message(Event&& e) const {}  // TODO
     template<typename T>
     std::vector<T> messages() const {}  // TODO - change container type
     void           clear_messages() {}  // TODO
@@ -124,18 +130,98 @@ public:
     //
     
     void start_frame() {}  // TODO
+    void reset_timer() {}  // TODO
+
+    std::map<std::string, size_t> timer_st() const {}
+    std::map<std::string, size_t> timer_mt() const {}
 
     template<typename F, typename... P>
-    void run_st(F f, P&& ...pars) {}  // TODO
+    void run_st(std::string const& name, F f, P&& ...pars) const {
+        f(*this, pars...);
+    }  // TODO
 
-    template<typename O, typename F, typename... P>
-    void run_st(O const& obj, F f, P&& ...pars) {}  // TODO
+    template<typename O, typename F, typename... P,
+        class = typename std::enable_if<std::is_class<O>::value>::type>
+    void run_st(std::string const& name, O& obj, F f, P&& ...pars) const { 
+        (obj.*f)(*this, pars...);  
+    }  // TODO
+
+    template<typename F, typename... P>
+    void run_mutable(std::string const& name, F f, P&& ...pars) {
+        f(*this, pars...);
+    }  // TODO
+
+    template<typename O, typename F, typename... P,
+        class = typename std::enable_if<std::is_class<O>::value>::type>
+    void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) { 
+        (obj.*f)(*this, pars...);  
+    }  // TODO
+
+    template<typename F, typename... P>
+    void run_mt(std::string const& name, F f, P&& ...pars) const {
+        f(*this, pars...);
+    }  // TODO
+
+    template<typename O, typename F, typename... P,
+        class = typename std::enable_if<std::is_class<O>::value>::type>
+    void run_mt(std::string const& name, O& obj, F f, P&& ...pars) const { 
+        (obj.*f)(*this, pars...);  
+    }  // TODO
+
+    void join() {}  // TODO
 
     // 
     // private data
     //
 private:
-    Global _global;
+    // {{{ templates & static assertions
+    
+    // create a tuple from the component list
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-value"
+
+    using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
+    static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
+
+    static_assert((std::is_copy_constructible<Components>::value, ...), "All components must be copyable.");
+
+    template <typename>      struct is_std_variant : std::false_type {};
+    template <typename... T> struct is_std_variant<std::variant<T...>> : std::true_type {};
+    static_assert(is_std_variant<Event>::value, "Event must be a std::variant<...>.");
+
+#pragma GCC diagnostic pop
+
+    // check if component is on the list
+    template <typename C>
+    void check_component() const {
+        static_assert((std::is_same_v<C, Components> || ...), "This component is not part of the component list given in the Engine initialization.");
+    }
+
+    // check if pool is an enum
+    static_assert(std::is_enum_v<Pool>, "Pool must be an enum.");
+
+    // check if class has operator<<
+    template<typename T>
+    struct has_ostream_method
+    {
+    private:
+        typedef std::true_type  yes;
+        typedef std::false_type no;
+
+        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
+        template<typename> static no test(...);
+    public:
+        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
+    };
+
+    // }}}
+
+    Global               _global              {};
+    std::vector<Event>   _events              {};
+    ComponentTupleVector _components_active   {};
+    size_t               _next_entity_id      = 0;
+
 };
 
 }

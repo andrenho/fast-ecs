@@ -21,7 +21,7 @@ struct Direction {
 TEST_CASE("entities") { 
     // {{{...
 
-    enum class Pool { My };
+    enum class Pool : int { My };
     
     struct C {};
     ECS<NoGlobal, NoEventQueue, Pool, C> ecs(Threading::Single);
@@ -194,17 +194,21 @@ void my_add(MyECS const& ecs, int& x) {
     ++x;
 }
 
+void change_c(MyECS& ecs) {
+    for (Entity& e : ecs.entities<C>())
+        ++e.get<C>().value;
+}
+
 TEST_CASE("systems") {
     // {{{ ...
     
-    MyECS ecs(Threading::Single);
+    MyECS ecs(Threading::Multi);
 
     Entity e1 = ecs.add();
     e1.add<C>();
 
     struct Adder {
         int x = 0;
-
         void internal_add(MyECS const& ecs) {
             ++this->x;
         }
@@ -212,100 +216,52 @@ TEST_CASE("systems") {
 
     ecs.start_frame();
     
+    // single threaded
+    
     int x = 0;
-    ecs.run_st(my_add, x);
+    ecs.run_st("my_add", my_add, x);
     CHECK(x == 1);
+    auto timer = ecs.timer_st();
+    CHECK(timer.find("my_add") != timer.end());
 
     Adder adder;
-    ecs.run_st(adder, &Adder::internal_add);
+    ecs.run_st("internal_add", adder, &Adder::internal_add);
+    CHECK(adder.x == 1);
+
+    // ecs.run_st("change_c", change_c);   // this line should give an error
+
+    // mutable
+
+    ecs.run_mutable("change_c", change_c);
+    CHECK(e1.get<C>().value == 1);
+
+    // multithreaded
+
+    struct Wait {
+        static void add(MyECS const&, int& x) {
+            for (int i=0; i < 20; ++i) {
+                ++x;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
+    };
+
+    ecs.reset_timer();
+    ecs.start_frame();
+    int x1 = 0, x2 = 0;
+    ecs.run_mt("wait1", Wait::add, x1);
+    ecs.run_mt("wait2", Wait::add, x2);
+    ecs.join();
+    CHECK(x1 > 0);
+    CHECK(x2 > 0);
+
+    auto timer_mt = ecs.timer_mt();
+    CHECK(timer_mt.at("wait1") > 0);
+    CHECK(timer_mt.at("wait2") > 0);
 
     // }}}
 }
 
-/*
-
--- {{{ systems
-do
-   ecs:start_frame()
-
-   -- run singlethreaded
-   local t = { value = 0 }
-   ecs:run_st('adder 1', adder, t)
-   assert(t.value == 1)
-
-   -- check timer
-   assert(ecs:timer()[1].name == 'adder 1')
-
-   -- singlethread non-mutable
-   function change_stuff()
-      e1.comp.value = 2
-   end
-   assert_error(function() ecs:run_st('change_stuff', change_stuff) end)
-   assert(e1.comp.value == 1)
-
-   -- multithread
-   function add_wait(t)
-      for i = 1,20 do
-         t.value = t.value + 1
-         love.timer.sleep(0.001)
-      end
-   end
-   local t1 = { value = 0 }
-   local t2 = { value = 0 }
-
-   ECS.multithreaded = false
-
-   ecs:reset_timer()
-   ecs:start_frame()
-   ecs:run_mt('multithread', {
-      { 'wait1', add_wait, t1 },
-      { 'wait2', add_wait, t2 },
-   })
-   ecs:join()
-   assert(t1.value > 0)
-   assert(t2.value > 0)
-
-   local timer = ecs:timer()
-   assert(timer[1].name == 'wait1')
-   assert(timer[1].time > 0)
-   assert(timer[2].name == 'wait2')
-   assert(timer[2].time > 0)
-
-   -- mutable
-   ecs:run_mutable('change_stuff', change_stuff)
-   assert(e1.comp.value == 2)
-end
-
--- }}}
-
--- {{{ print components, values
-
-do
-   local ecs = ECS({
-      position = {
-         x = 'number',
-         y = 'number?'
-      },
-      direction = {
-         dir = 'string'
-      }
-   }, false)
-   
-   -- set component
-   local e1 = ecs:add()
-   e1.position = { x = 34, y = 10 }
-   e1.direction = { dir = 'N' }
-
-   p(e1.position)
-   p(e1)
-
-   ecs.test = { hello = 'world' }
-   ecs.value = 42
-   p(ecs)
-end
-
--- }}}
-
-*/
+// TODO - debugging
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
