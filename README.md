@@ -250,6 +250,23 @@ void run_mutable(string name, Object obj, F function_ptr, Parameters...);  // me
 ecs.set_threading(Threading::Single);
 ```
 
+It is possible to have ECS to calculate automatically the time it takes to run each system.
+
+```C++
+// on the beginning of the frame, call
+ecs.start_frame();
+
+// then, after running the systems, get an average of the last system execution time by using
+map<string, milliseconds> timer_st();    // returns time of the single-threaded systems
+map<string, milliseconds> timer_mt();    // returns time of the multithreaded systems
+
+// The timers can be reset every X frames. For example, in a 60 FPS game, to get the 
+// average time for the last second, use:
+
+if (frame_counter % 60 == 0)
+    ecs.reset_timer();
+```
+
 ## Globals
 
 Globals can be used for an unique piece of information that is shared between
