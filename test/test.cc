@@ -1,7 +1,7 @@
+#include "fastecs.hh"
+
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
-
-#include "fastecs.hh"
 
 using namespace std;
 using namespace ecs;
@@ -9,7 +9,7 @@ using namespace ecs;
 // {{{ helper structs
 
 struct Position {
-    double x, y;
+    int x, y;
 };
 
 struct Direction {
@@ -26,24 +26,24 @@ TEST_CASE("entities") {
     struct C {};
     ECS<NoGlobal, NoEventQueue, Pool, C> ecs(Threading::Single);
 
-    CHECK(ecs.number_of_entities() == 0);
-
-    Entity e1 = ecs.add();
+    auto e1 = ecs.add();
     CHECK(e1.id == 0);
-    CHECK(ecs.number_of_entities() == 1);
 
-    Entity e2 = ecs.add();
+    auto e2 = ecs.add();
+    CHECK(e2.id == 1);
+    
     Entity e3 = ecs.add(Pool::My);
+    CHECK(e3.id == 2);
 
     size_t count = 0;
-    for (Entity const& e : ecs.entities()) {
+    for (auto const& e : ecs.entities()) {
         CHECK((e == e1 || e == e2 || e == e3));
         ++count;
     }
     CHECK(count == 3);
 
     count = 0;
-    for (Entity const& e : ecs.entities(Pool::My)) {
+    for (auto const& e : ecs.entities(Pool::My)) {
         CHECK((e != e1 && e != e2 && e == e3));
         ++count;
     }
@@ -52,7 +52,7 @@ TEST_CASE("entities") {
     ecs.remove(e1);
 
     count = 0;
-    for (Entity const& e : ecs.entities()) {
+    for (auto const& e : ecs.entities()) {
         CHECK((e != e1 && (e == e2 || e == e3)));
         ++count;
     }
@@ -68,8 +68,8 @@ TEST_CASE("components") {
 
     // set component
     Entity e1 = ecs.add();
-    e1.add<Position>(4, 5);
-    e1.add<Direction>("N");
+    e1.add(Position { 4, 5 });
+    e1.add(Direction { "N" });
     CHECK(e1.get<Position>().x == 4);
     CHECK(e1.get<Position>().y == 5);
 
@@ -104,44 +104,49 @@ TEST_CASE("iterate components") {
     ECS<NoGlobal, NoEventQueue, Pool, Position, Direction> ecs(Threading::Single);
 
     Entity e1 = ecs.add();
-    e1.add<Position>(34, 10);
-    e1.add<Direction>("N");
+    e1.add(Position { 34, 10 });
+    e1.add(Direction { "N" });
     
     Entity e2 = ecs.add(Pool::My);
-    e2.add<Position>(12, 20);
+    e2.add(Position { 12, 20 });
 
     size_t count = 0;
-    for (Entity& e : ecs.entities<Position>()) {
+    for (auto const& e : ecs.entities<Position>()) {
         CHECK((e == e1 || e == e2));
         ++count;
     }
     CHECK(count == 2);
 
     count = 0;
-    for (Entity& e : ecs.entities<Position>(Pool::My)) {
+    for (auto const& e : ecs.entities<Position>(Pool::My)) {
         CHECK(e == e2);
         ++count;
     }
     CHECK(count == 1);
 
     count = 0;
-    for (Entity& e : ecs.entities<Position, Direction>()) {
+    for (auto const& e : ecs.entities<Position, Direction>()) {
         CHECK(e == e1);
         ++count;
     }
-    CHECK(count == 2);
+    CHECK(count == 1);
 
     // const iteration
     const ECS ecs_const = ecs;
+
+    count = 0;
+    for (auto const& e : ecs_const.entities())
+        ++count;
+    CHECK(count == 2);
     
     count = 0;
-    for (Entity const& e : ecs_const.entities<Position>(Pool::My)) {
+    for (auto const& e : ecs_const.entities<Position>(Pool::My)) {
         CHECK(e == e2);
         ++count;
     }
     CHECK(count == 1);
     
-    //for (Entity& e : ecs_const.entities<Position>(Pool::My)) {}   // will give an error
+    // for (auto& e : ecs_const.entities<Position>(Pool::My)) { e.add(Position {0,0}); }   // will give an error
 
     // }}}
 }
@@ -163,6 +168,7 @@ TEST_CASE("globals") {
     // }}}
 }
 
+/*
 TEST_CASE("messages") {
     // {{{ ...
     struct EventTypeA { size_t id; };
@@ -187,6 +193,8 @@ TEST_CASE("messages") {
     // }}}
 }
 
+// {{{ helper for systems
+
 struct C { int value = 0; };
 using MyECS = ECS<NoGlobal, NoEventQueue, NoPool, C>;
 
@@ -198,6 +206,8 @@ void change_c(MyECS& ecs) {
     for (Entity& e : ecs.entities<C>())
         ++e.get<C>().value;
 }
+
+// }}}
 
 TEST_CASE("systems") {
     // {{{ ...
@@ -262,6 +272,58 @@ TEST_CASE("systems") {
     // }}}
 }
 
-// TODO - debugging
+*/
+
+/*  TODO
+
+TEST_CASE("debugging") {
+    // {{{ ...
+
+    using MyEngine = Engine<System, Global, Event, A, B>;
+    MyEngine e;
+
+    Entity id = e.add_entity();
+    e.add_component<A>(id, 24);
+    e.add_component<B>(id, "hello");
+
+    e.add_entity("myent");
+    e.add_component<A>("myent", 24);
+    e.set_entity_debugging_info("myent", "Debugging info");
+
+    e.add_system<TestSystem>(2);
+
+    e.send_event(EventTypeA { 10 });
+
+    SUBCASE("debug") {
+        cout << e.debug_all() << "\n";
+    }
+
+    SUBCASE("info") {
+        CHECK(e.number_of_entities() == 2);
+        CHECK(e.number_of_components() == 2);
+        CHECK(e.number_of_systems() == 1);
+        CHECK(e.number_of_event_types() == 2);
+        CHECK(e.event_queue_size() == 1);
+
+        Engine<System, Global, NoEventQueue, A, B> e2;
+        CHECK(e2.number_of_event_types() == 0);
+    }
+
+    // }}}
+}
+
+// uncomment one of the following commented lines on order to have a static error:
+
+struct GlobalNDC { GlobalNDC(int) {} };
+// Engine<NoSystem, GlobalNDC, NoEventQueue, A> e1;
+
+struct D { D(D const&) = delete; };
+// Engine<NoSystem, NoGlobal, NoEventQueue, A, D> e2;
+
+// Engine<NoSystem, NoGlobal, int, A> e3;
+
+// int test() { Engine<NoSystem, NoGlobal, NoEventQueue, A> e; e.add_component<B>(ecs::Entity { 0 }); };
+
+*/
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker

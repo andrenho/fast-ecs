@@ -1,76 +1,130 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#include <algorithm>
 #include <chrono> 
+#include <limits>
 #include <map>
+#include <set>
 #include <string>
 #include <variant>
+#include <unordered_map>
 #include <thread>
 #include <type_traits>
+#include <vector>
 
-#if __cplusplus < 201703L
-#error "A compiler with C++17 support is required."
+#ifndef NOABI
+#  include <cxxabi.h>
 #endif
 
 namespace ecs {
 
 enum class Threading { Single, Multi };
 enum class NoPool {};
+struct     NoGlobal {};
+using      NoEventQueue = std::variant<std::nullptr_t>;
 
-struct NoGlobal {};
-using  NoEventQueue = std::variant<std::nullptr_t>;
+// {{{ exception class
 
+class ECSError : public std::runtime_error {
+public:
+    explicit ECSError(std::string const& what_arg) : runtime_error(what_arg) {}
+    explicit ECSError(const char* what_arg)        : runtime_error(what_arg) {}
+};
+
+// }}}
+
+// {{{ entity class
+
+template<typename ECS, typename Pool>
 class Entity {
 public:
-    Entity(size_t id) : id(id) {}
-    const size_t id;
+    Entity(size_t id, Pool pool, ECS* ecs) : id(id), pool(pool), ecs(ecs) {}    // TODO - visible only to ECS
 
-    template<typename T, typename... P>
-    void add(P&& ...pars) { }  // TODO
+    template<typename C>
+    C& add(C&& c) {
+        return ecs->add_component(id, pool, std::move(c));
+    }
 
-    template<typename T>
-    T& get() {}
+    template<typename C>
+    C& get() {
+        return ecs->template component<C>(id, pool);
+    }
 
-    template<typename T>
-    T const& get() const {}
+    template<typename C>
+    C const& get() const {
+        return ecs->template component<C>(id, pool);
+    }
 
-    template<typename T>
-    T* get_ptr() {}
+    template<typename C>
+    C* get_ptr() {
+        return ecs->template component_ptr<C>(id, pool);
+    }
 
-    template<typename T>
-    T const* get_ptr() const {}
+    template<typename C>
+    C const* get_ptr() const {
+        return ecs->template component_ptr<C>(id, pool);
+    }
 
-    template<typename T>
-    bool has() const {}
+    template<typename C>
+    bool has() const {
+        return ecs->template has_component<C>(id, pool);
+    }
 
-    template<typename T>
-    void remove() {}
+    template<typename C>
+    void remove() {
+        ecs->template remove_component<C>(id, pool);
+    }
 
     bool operator==(Entity const& other) const { return id == other.id; }
     bool operator!=(Entity const& other) const { return id != other.id; }
+
+    const size_t id;
+    const Pool pool;
+
+private:
+    ECS* ecs;
 };
 
-class EntityIterator {
+
+template<typename ECS, typename Pool>
+class ConstEntity {
 public:
-    EntityIterator operator++(int) {}   // TODO
-    Entity& operator*() const {}   // TODO
-    friend bool operator==(const EntityIterator&, const EntityIterator&) {}   // TODO
-    friend bool operator!=(const EntityIterator&, const EntityIterator&) {}    // TODO
-    EntityIterator& operator++() {}   // TODO
-    EntityIterator begin() {}   // TODO
-    EntityIterator end() {}   // TODO
+    ConstEntity(size_t id, Pool pool, ECS const* ecs) : id(id), pool(pool), ecs(ecs) {}    // TODO - visible only to ECS
+
+    template<typename C>
+    C const& get() const {
+        return ecs->template component<C>(id, pool);
+    }
+
+    template<typename C>
+    C const* get_ptr() const {
+        return ecs->template component_ptr<C>(id, pool);
+    }
+
+    template<typename C>
+    bool has() const {
+        return ecs->template has_component<C>(id, pool);
+    }
+
+    bool operator==(ConstEntity const& other) const { return id == other.id; }
+    bool operator!=(ConstEntity const& other) const { return id != other.id; }
+    bool operator==(Entity<ECS, Pool> const& other) const { return id == other.id; }
+    bool operator!=(Entity<ECS, Pool> const& other) const { return id != other.id; }
+
+    const size_t id;
+    const Pool pool;
+
+private:
+    ECS const* ecs;
 };
 
-class ConstEntityIterator {
-public:
-    ConstEntityIterator operator++(int) {}   // TODO
-    Entity const& operator*() const {}   // TODO
-    friend bool operator==(const ConstEntityIterator&, const ConstEntityIterator&) {}   // TODO
-    friend bool operator!=(const ConstEntityIterator&, const ConstEntityIterator&) {}    // TODO
-    ConstEntityIterator& operator++() {}   // TODO
-    ConstEntityIterator begin() {}   // TODO
-    ConstEntityIterator end() {}   // TODO
-};
+template<typename ECS, typename Pool>
+bool operator==(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { return a.id == b.id; }
+template<typename ECS, typename Pool>
+bool operator!=(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { return a.id != b.id; }
+
+// }}}
 
 template <typename Global, typename Event, typename Pool, typename... Components>
 class ECS {
@@ -80,54 +134,89 @@ public:
     template <typename... P>
     explicit ECS(Threading threading, P&& ...pars) : _global(Global { pars... }) {}
 
-    //
+    // 
     // entities
     //
 
-    size_t number_of_entities() const { return 0; }   // TODO
-    Entity add() {}   // TODO
-    Entity add(Pool pool) { (void) pool; }  // TODO
-    void   remove(Entity const& entity) {}   // TODO
+    Entity<MyECS, Pool> add() {
+        // {{{ ...
+        _entity_pools.at(DefaultPool).emplace(_next_entity_id, true);
+        return Entity<MyECS, Pool>(_next_entity_id++, DefaultPool, this);
+        // }}}
+    }
 
-    //
+    Entity<MyECS, Pool> add(Pool pool) { 
+        // {{{ ...
+        auto it = _entity_pools.insert({ pool, {} }).first;
+        it->second.emplace(_next_entity_id, true);
+        _pool_set.insert(pool);
+        _components.insert({ pool, {} });
+        return Entity<MyECS, Pool>(_next_entity_id++, pool, this);
+        // }}}
+    }
+
+    void remove(Entity<MyECS, Pool> const& entity) {
+        // {{{ ...
+        for (auto& [_, pool_map]: _entity_pools)
+            pool_map.erase(entity.id);
+        // }}}
+    }
+
     // iteration
-    // 
 
-    EntityIterator entities() {}   // TODO
-    EntityIterator entities(Pool pool) {}  // TODO
+    std::vector<Entity<ECS, Pool>> entities() {
+        return find_matching_entities(_pool_set);
+    }
 
-    template <typename... T>
-    EntityIterator entities() {}   // TODO
-    template <typename... T>
-    EntityIterator entities(Pool pool) {}  // TODO
-
-    ConstEntityIterator entities() const {}   // TODO
-    ConstEntityIterator entities(Pool pool) const {}  // TODO
+    std::vector<Entity<ECS, Pool>> entities(Pool pool) {
+        return find_matching_entities(std::vector<Pool> { pool });
+    }
 
     template <typename... T>
-    ConstEntityIterator entities() const {}   // TODO
-    template <typename... T>
-    ConstEntityIterator entities(Pool pool) const {}  // TODO
+    std::vector<Entity<ECS, Pool>> entities() {
+        return find_matching_entities_component<T...>(_pool_set);
+    }
 
-    // 
-    // globals
-    //
+    template <typename... T>
+    std::vector<Entity<ECS, Pool>> entities(Pool pool) {
+        return find_matching_entities_component<T...>(std::vector<Pool> { pool });
+    }
+
+    std::vector<ConstEntity<ECS, Pool>> entities() const {
+        return find_matching_entities(_pool_set);
+    }
+
+    std::vector<ConstEntity<ECS, Pool>> entities(Pool pool) const {
+        return find_matching_entities(std::vector<Pool> { pool });
+    }
+
+    template <typename... T>
+    std::vector<ConstEntity<ECS, Pool>> entities() const {
+        return find_matching_entities_component<T...>(_pool_set);
+    }
+
+    template <typename... T>
+    std::vector<ConstEntity<ECS, Pool>> entities(Pool pool) const {
+        return find_matching_entities_component<T...>(std::vector<Pool> { pool });
+    }
+
+    // {{{ globals
 
     Global& operator()()             { return _global; }
     Global const& operator()() const { return _global; }
 
-    //
-    // messages
-    //
+    // }}}
+
+    // {{{ messages 
 
     void           add_message(Event&& e) const {}  // TODO
     template<typename T>
     std::vector<T> messages() const {}  // TODO - change container type
     void           clear_messages() {}  // TODO
 
-    // 
-    // systems
-    //
+    // }}}
+
+    // {{{ systems
     
     void start_frame() {}  // TODO
     void reset_timer() {}  // TODO
@@ -170,18 +259,44 @@ public:
 
     void join() {}  // TODO
 
-    // 
-    // private data
-    //
+    // }}}
+
+    // {{{ debugging
+
+    template <typename C>
+    static std::string type_name() {
+        // {{{ ...
+        int status;
+        std::string tname = typeid(C).name();
+#ifndef NOABI
+        char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
+        if(status == 0) {
+            tname = demangled_name;
+            free(demangled_name);
+        }
+#endif
+        return tname;
+        // }}}
+    }
+
+    // }}}
+
+    friend class Entity<ECS, Pool>;
+
 private:
+
     // {{{ templates & static assertions
     
+#if __cplusplus < 201703L
+#error "A compiler with C++17 support is required."
+#endif
+
     // create a tuple from the component list
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-value"
 
-    using ComponentTupleVector = typename std::tuple<std::vector<std::pair<Entity, Components>>...>;
+    using ComponentTupleVector = typename std::tuple<std::vector<std::pair<size_t, Components>>...>;
     static_assert(std::tuple_size<ComponentTupleVector>::value > 0, "Add at least one component.");
 
     static_assert((std::is_copy_constructible<Components>::value, ...), "All components must be copyable.");
@@ -217,11 +332,231 @@ private:
 
     // }}}
 
-    Global               _global              {};
-    std::vector<Event>   _events              {};
-    ComponentTupleVector _components_active   {};
-    size_t               _next_entity_id      = 0;
+    // {{{ private methods (iteration)
 
+    // type aliases
+    template <typename C>
+    using my_iter = typename std::vector<std::pair<size_t, C>>::iterator;
+
+    template <typename C>
+    using my_citer = typename std::vector<std::pair<size_t, C>>::const_iterator;
+
+    template <typename Pools>
+    size_t size_to_reserve(Pools const& pools) const {
+        size_t size = 0;
+        for (auto const& pool: pools)
+            size += _entity_pools.at(pool).size();
+        return size;
+    }
+
+    template <typename... C, typename Pools>
+    std::vector<Entity<ECS, Pool>> find_matching_entities_component(Pools const& pools) {
+        ((check_component<C>(), ...));
+
+        size_t size = size_to_reserve(pools);
+        std::vector<Entity<ECS, Pool>> entities;
+        entities.reserve(size);
+        for (auto const& pool: pools) {
+            if constexpr (sizeof...(C) == 0) {
+                for (auto [id,_]: _entity_pools.at(pool))
+                    entities.emplace_back(id, pool, this);
+            } else {
+                // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+                std::tuple<my_iter<C>...> current;
+                ((std::get<my_iter<C>>(current) = comp_vec<C>(pool).begin()), ...);
+                
+                // while none of the iterators reached end
+                while (((std::get<my_iter<C>>(current) != comp_vec<C>(pool).end()) && ...)) {
+                    // find iterator that is more advanced
+                    std::vector<size_t> entities1 { std::get<my_iter<C>>(current)->first... };
+                    [[maybe_unused]] size_t last = *std::max_element(entities1.begin(), entities1.end());
+
+                    // advance all iterators that are behind the latest one
+                    (((std::get<my_iter<C>>(current)->first < last) ? std::get<my_iter<C>>(current)++ : std::get<my_iter<C>>(current)), ...);
+                    if (((std::get<my_iter<C>>(current) == comp_vec<C>(pool).end()) || ...))
+                        break;
+
+                    // if all iterators are equal, call user function and advance all iterators
+                    std::vector<size_t> entities2 { std::get<my_iter<C>>(current)->first... };
+                    if (std::adjacent_find(entities2.begin(), entities2.end(), std::not_equal_to<size_t>()) == entities2.end()) {
+                        entities.emplace_back(entities2.at(0), pool, this);
+                        (std::get<my_iter<C>>(current)++, ...);
+                    }
+                }
+            }
+        }
+        return entities;
+    }
+
+    template <typename... C, typename Pools>
+    std::vector<ConstEntity<ECS, Pool>> find_matching_entities_component(Pools const& pools) const {
+        ((check_component<C>(), ...));
+
+        size_t size = size_to_reserve(pools);
+        std::vector<ConstEntity<ECS, Pool>> entities;
+        entities.reserve(size);
+        for (auto const& pool: pools) {
+            if constexpr (sizeof...(C) == 0) {
+                for (auto [id,_]: _entity_pools.at(pool))
+                    entities.emplace_back(id, pool, this);
+            } else {
+                // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
+                std::tuple<my_citer<C>...> current;
+                ((std::get<my_citer<C>>(current) = comp_vec<C>(pool).cbegin()), ...);
+                
+                // while none of the iterators reached cend
+                while (((std::get<my_citer<C>>(current) != comp_vec<C>(pool).cend()) && ...)) {
+                    // find iterator that is more advanced
+                    std::vector<size_t> entities1 { std::get<my_citer<C>>(current)->first... };
+                    [[maybe_unused]] size_t last = *std::max_element(entities1.cbegin(), entities1.cend());
+
+                    // advance all iterators that are behind the latest one
+                    (((std::get<my_citer<C>>(current)->first < last) ? std::get<my_citer<C>>(current)++ : std::get<my_citer<C>>(current)), ...);
+                    if (((std::get<my_citer<C>>(current) == comp_vec<C>(pool).cend()) || ...))
+                        break;
+
+                    // if all iterators are equal, call user function and advance all iterators
+                    std::vector<size_t> entities2 { std::get<my_citer<C>>(current)->first... };
+                    if (std::adjacent_find(entities2.cbegin(), entities2.cend(), std::not_equal_to<size_t>()) == entities2.cend()) {
+                        entities.emplace_back(entities2.at(0), pool, this);
+                        (std::get<my_citer<C>>(current)++, ...);
+                    }
+                }
+            }
+        }
+        return entities;
+    }
+
+    template <typename Pools>
+    std::vector<ConstEntity<ECS, Pool>> find_matching_entities(Pools const& pools) const {
+        // {{{ ...
+        size_t size = size_to_reserve(pools);
+        std::vector<ConstEntity<ECS, Pool>> entities;
+        entities.reserve(size);
+        for (auto const& pool: pools)
+            for (auto [id,_]: _entity_pools.at(pool))
+                entities.emplace_back(id, pool, this);
+        return entities;
+        // }}}
+    }
+    
+    template <typename Pools>
+    std::vector<Entity<ECS, Pool>> find_matching_entities(Pools const& pools) {
+        // {{{ ...
+        size_t size = size_to_reserve(pools);
+        std::vector<Entity<ECS, Pool>> entities;
+        entities.reserve(size);
+        for (auto const& pool: pools)
+            for (auto [id,_]: _entity_pools.at(pool))
+                entities.emplace_back(id, pool, this);
+        return entities;
+        // }}}
+    }
+    
+    // }}}
+
+    // {{{ private methods (components)
+
+    template<typename C>
+    C& add_component(size_t id, Pool pool, C&& c) {
+        // {{{ ...
+        check_component<C>();
+
+        auto& vec = comp_vec<C>(pool);
+        auto it = std::lower_bound(begin(vec), end(vec), id,
+            [](auto const& p, auto e) { return p.first < e; });
+
+        if (it != vec.end() && it->first == id)
+            throw ECSError(std::string("Component '") + type_name<C>() + "' already exist for entity " + std::to_string(id) + ".");
+
+        return vec.insert(it, { id, c })->second;
+        // }}}
+    }
+
+    template<typename C>
+    C& component(size_t id, Pool pool) {
+        // {{{ ...
+        return const_cast<C&>(static_cast<MyECS const*>(this)->component<C>(id, pool));
+    }
+
+    template<typename C>
+    C const& component(size_t id, Pool pool) const {
+        C const* c = component_ptr<C>(id, pool);
+        if (c == nullptr)
+            throw ECSError(std::string("Entity ") + std::to_string(id) + " has no component '" + type_name<C>() + "'.");
+        return *c;
+        // }}}
+    }
+
+    template<typename C>
+    C* component_ptr(size_t id, Pool pool) {
+        // {{{ ...
+        return const_cast<C*>(static_cast<MyECS const*>(this)->component_ptr<C>(id, pool));
+    }
+
+    template<typename C>
+    C const* component_ptr(size_t id, Pool pool) const {
+        check_component<C>();
+
+        auto& vec = comp_vec<C>(pool);
+        auto it = std::lower_bound(begin(vec), end(vec), id,
+            [](auto const& p, size_t e) { return p.first < e; });
+        if (it != vec.end() && it->first == id)
+            return &it->second;
+        return nullptr;
+        // }}}
+    }
+
+    template<typename C>
+    bool has_component(size_t id, Pool pool) const {
+        // {{{ ...
+        return component_ptr<C>(id, pool) != nullptr;
+        // }}}
+    }
+
+    template<typename C>
+    void remove_component(size_t id, Pool pool) {
+        // {{{ ...
+        check_component<C>();
+
+        auto& vec = comp_vec<C>(pool);
+        auto it = std::lower_bound(begin(vec), end(vec), id,
+            [](auto const& p, size_t e) { return p.first < e; });
+        if (it != vec.end() && it->first == id)
+            vec.erase(it);
+        else
+            throw ECSError(std::string("Entity ") + std::to_string(id) + " has no component '" + type_name<C>() + "'.");
+        // }}}
+    }
+
+    template <typename C>
+    std::vector<std::pair<size_t, C>>& comp_vec(Pool pool) {
+        // {{{ ...
+        return std::get<std::vector<std::pair<size_t, C>>>(_components.at(pool));
+    }
+
+    template <typename C>
+    std::vector<std::pair<size_t, C>> const& comp_vec(Pool pool) const {
+        return std::get<std::vector<std::pair<size_t, C>>>(_components.at(pool));
+        // }}}
+    }
+
+    // }}}
+
+    // {{{ private data
+
+    using EntityPool = std::unordered_map<size_t, bool>;
+
+    Global                                         _global              {};
+    std::vector<Event>                             _events              {};
+    std::unordered_map<Pool, EntityPool>           _entity_pools        { { DefaultPool, {} } };
+    std::unordered_map<Pool, ComponentTupleVector> _components          { { DefaultPool, {} } };
+    size_t                                         _next_entity_id      = 0;
+    std::set<Pool>                                 _pool_set            { DefaultPool };
+
+    static constexpr Pool DefaultPool = static_cast<Pool>(std::numeric_limits<typename std::underlying_type<Pool>::type>::max());
+
+    // }}}
 };
 
 }
