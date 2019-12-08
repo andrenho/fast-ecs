@@ -173,7 +173,6 @@ but then all constructors (move, copy and assignment) need to be provided.
 
 Also, remember that entities and components might be moved within the array, so pointers to the
 components won't work. Always refer to the entities by their id.
-```
 
 ## Iterating over entities
 
