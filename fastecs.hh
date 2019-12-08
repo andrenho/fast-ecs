@@ -165,8 +165,54 @@ public:
     }
 
 private:
-    std::vector<T> queue_;
-    std::mutex mutex_;
+    std::vector<T> queue_ {};
+    std::mutex mutex_     {};
+};
+
+// }}}
+
+// {{{ timer
+
+class Timer {
+public:
+    void start_frame() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ++_iterations;
+    }
+
+    void reset() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        _timer_mt.clear();
+        _timer_st.clear();
+        _iterations = 0;
+    }
+
+    void add_time(std::string const& name, std::chrono::milliseconds ms, bool mt) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto& timer = mt ? _timer_mt : _timer_st;
+            auto it = timer.find(name);
+            if (it == timer.end())
+                timer.insert({ name, ms });
+            else
+                it->second += ms;
+        }
+        if (mt)
+            add_time("multithreaded", ms, false);
+    }
+
+    std::map<std::string, std::chrono::milliseconds> timer(bool mt) const {
+        std::map<std::string, std::chrono::milliseconds> t;
+        for (auto const& [name, ms]: (mt ? _timer_mt : _timer_st))
+            t.insert({ name, ms / _iterations });
+        return t;
+    }
+
+private:
+    std::map<std::string, std::chrono::milliseconds> _timer_mt {};
+    std::map<std::string, std::chrono::milliseconds> _timer_st {};
+    size_t _iterations = 0;
+    std::mutex mutex_ {};
 };
 
 // }}}
@@ -179,6 +225,8 @@ public:
     template <typename... P>
     explicit ECS(Threading threading, P&& ...pars) 
         : _threading(threading), _global(Global { pars... }) {}
+
+    ~ECS() { join(); }
 
     // 
     // entities
@@ -213,47 +261,63 @@ public:
     //
 
     std::vector<Entity<ECS, Pool>> entities() {
+        // {{{ ...
         return find_matching_entities(_pool_set);
+        // }}}
     }
 
     std::vector<Entity<ECS, Pool>> entities(Pool pool) {
+        // {{{ ...
         return find_matching_entities(std::vector<Pool> { pool });
+        // }}}
     }
 
     template <typename... T>
     std::vector<Entity<ECS, Pool>> entities() {
+        // {{{ ...
         return find_matching_entities_component<T...>(_pool_set);
+        // }}}
     }
 
     template <typename... T>
     std::vector<Entity<ECS, Pool>> entities(Pool pool) {
+        // {{{ ...
         return find_matching_entities_component<T...>(std::vector<Pool> { pool });
+        // }}}
     }
 
     std::vector<ConstEntity<ECS, Pool>> entities() const {
+        // {{{ ...
         return find_matching_entities(_pool_set);
+        // }}}
     }
 
     std::vector<ConstEntity<ECS, Pool>> entities(Pool pool) const {
+        // {{{ ...
         return find_matching_entities(std::vector<Pool> { pool });
+        // }}}
     }
 
     template <typename... T>
     std::vector<ConstEntity<ECS, Pool>> entities() const {
+        // {{{ ...
         return find_matching_entities_component<T...>(_pool_set);
+        // }}}
     }
 
     template <typename... T>
     std::vector<ConstEntity<ECS, Pool>> entities(Pool pool) const {
+        // {{{ ...
         return find_matching_entities_component<T...>(std::vector<Pool> { pool });
+        // }}}
     }
 
     //
     // globals
     //
 
-    Global& operator()()             { return _global; }
-    Global const& operator()() const { return _global; }
+    Global& operator()()                        { return _global; }
+    Global const& operator()() const            { return _global; }
 
     //
     // messages 
@@ -270,63 +334,122 @@ public:
         
     template<typename T>
     std::vector<T> messages() {   // non-const by design
+        // {{{ ...
         std::vector<T> r;
         for (auto ev : _events.underlying_vector())
             if (std::holds_alternative<T>(ev))
                 r.push_back(std::get<T>(ev));
         return r;
+        // }}}
     }
 
-    void clear_messages() {
-        _events.clear();
-    }
+    void clear_messages()                       { _events.clear(); }
 
-    // }}}
-
-    // {{{ systems
+    //
+    // systems
+    //
     
-    void start_frame() {}  // TODO
-    void reset_timer() {}  // TODO
+    void start_frame()                          { _timer.start_frame(); }
+    void reset_timer()                          { _timer.reset(); }
 
-    std::map<std::string, size_t> timer_st() const {}
-    std::map<std::string, size_t> timer_mt() const {}
+    std::map<std::string, std::chrono::milliseconds> timer_st() const { return _timer.timer(false); }
+    std::map<std::string, std::chrono::milliseconds> timer_mt() const { return _timer.timer(true); }
 
+    // {{{ auxiliary methods
+private:
+    using Time = std::chrono::time_point<std::chrono::high_resolution_clock>;
+    static Time now() { return std::chrono::high_resolution_clock::now(); }
+    void add_time(std::string const& name, Time start, bool mt) const { 
+        _timer.add_time(name, std::chrono::duration_cast<std::chrono::milliseconds>(now() - start), mt);
+    }
+    // }}}
+    
+public:
     template<typename F, typename... P>
     void run_st(std::string const& name, F f, P&& ...pars) const {
+        // {{{ ...
+        auto start = now();
         f(*this, pars...);
-    }  // TODO
+        add_time(name, start, false);
+        // }}}
+    }
 
     template<typename O, typename F, typename... P,
         class = typename std::enable_if<std::is_class<O>::value>::type>
     void run_st(std::string const& name, O& obj, F f, P&& ...pars) const { 
+        // {{{ ...
+        auto start = now();
         (obj.*f)(*this, pars...);  
-    }  // TODO
+        add_time(name, start, false);
+        // }}}
+    }
 
     template<typename F, typename... P>
     void run_mutable(std::string const& name, F f, P&& ...pars) {
+        // {{{ ...
+        auto start = now();
         f(*this, pars...);
-    }  // TODO
+        add_time(name, start, false);
+        // }}}
+    }
 
     template<typename O, typename F, typename... P,
         class = typename std::enable_if<std::is_class<O>::value>::type>
     void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) { 
+        // {{{ ...
+        auto start = now();
         (obj.*f)(*this, pars...);  
-    }  // TODO
+        add_time(name, start, false);
+        // }}}
+    }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wparentheses"
 
     template<typename F, typename... P>
     void run_mt(std::string const& name, F f, P&& ...pars) const {
-        f(*this, pars...);
-    }  // TODO
+        // {{{ ...
+        static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)), 
+                "Don't use non-const references in multithreaded code. Use pointers instead.");
+        if (_threading == Threading::Single) {
+            run_st(name, f, pars...);
+        } else {
+            _threads.emplace_back([](std::string name, MyECS const& ecs, auto f, auto... pars) {
+                auto start = now();
+                f(ecs, pars...);
+                ecs.add_time(name, start, true);
+            }, name, std::ref(*this), f, pars...);
+        }
+        // }}}
+    }
 
     template<typename O, typename F, typename... P,
         class = typename std::enable_if<std::is_class<O>::value>::type>
     void run_mt(std::string const& name, O& obj, F f, P&& ...pars) const { 
-        (obj.*f)(*this, pars...);  
-    }  // TODO
+        // {{{ ...
+        static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)), 
+                "Don't use non-const references in multithreaded code. Use pointers instead.");
+        if (_threading == Threading::Single) {
+            run_st(name, obj, f, pars...);
+        } else {
+            _threads.emplace_back([](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
+                auto start = now();
+                (obj.*f)(ecs, pars...);
+                ecs.add_time(name, start, true);
+            }, &obj, name, std::ref(*this), f, pars...);
+        }
+        // }}}
+    }
 
-    void join() {}  // TODO
+#pragma GCC diagnostic push
 
-    // }}}
+    void join() {
+        // {{{ ...
+        for (std::thread& t: _threads)
+            t.join();
+        _threads.clear();
+        // }}}
+    }
 
     // {{{ debugging
 
@@ -624,6 +747,8 @@ private:
     size_t                                         _next_entity_id      = 0;
     std::set<Pool>                                 _pool_set            { DefaultPool };
     bool                                           _running_mt          = false;
+    mutable Timer                                  _timer               {};
+    mutable std::vector<std::thread>               _threads             {};
 
     static constexpr Pool DefaultPool = static_cast<Pool>(std::numeric_limits<typename std::underlying_type<Pool>::type>::max());
 

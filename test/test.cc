@@ -143,7 +143,7 @@ TEST_CASE("iterate components") {
     const MyECS &ecs_const = ecs;
 
     count = 0;
-    for (auto const& _ : ecs_const.entities())
+    for ([[maybe_unused]] auto const& _ : ecs_const.entities())
         ++count;
     CHECK(count == 2);
     
@@ -205,11 +205,11 @@ TEST_CASE("messages") {
 struct C { int value = 0; };
 using MyECS = ECS<NoGlobal, NoEventQueue, NoPool, C>;
 
-void my_add(MyECS const& ecs, int& x) {
+static void my_add(MyECS const&, int& x) {
     ++x;
 }
 
-void change_c(MyECS& ecs) {
+static void change_c(MyECS& ecs) {
     for (auto& e : ecs.entities<C>())
         ++e.get<C>().value;
 }
@@ -226,12 +226,11 @@ TEST_CASE("systems") {
 
     struct Adder {
         int x = 0;
-        void internal_add(MyECS const& ecs) {
+        void internal_add(MyECS const&) {
             ++this->x;
         }
     };
 
-    /*
     ecs.start_frame();
     
     // single threaded
@@ -256,9 +255,10 @@ TEST_CASE("systems") {
     // multithreaded
 
     struct Wait {
-        static void add(MyECS const&, int& x) {
+        static void add(MyECS const&, int thnum, int* x) {
             for (int i=0; i < 20; ++i) {
-                ++x;
+                ++(*x);
+                cout << "Thread " << thnum << ": " << *x << "\n";
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }
@@ -267,16 +267,15 @@ TEST_CASE("systems") {
     ecs.reset_timer();
     ecs.start_frame();
     int x1 = 0, x2 = 0;
-    ecs.run_mt("wait1", Wait::add, x1);
-    ecs.run_mt("wait2", Wait::add, x2);
+    ecs.run_mt("wait1", Wait::add, 1, &x1);
+    ecs.run_mt("wait2", Wait::add, 2, &x2);
     ecs.join();
     CHECK(x1 > 0);
     CHECK(x2 > 0);
 
     auto timer_mt = ecs.timer_mt();
-    CHECK(timer_mt.at("wait1") > 0);
-    CHECK(timer_mt.at("wait2") > 0);
-    */
+    CHECK(timer_mt.at("wait1") > std::chrono::milliseconds(0));
+    CHECK(timer_mt.at("wait2") > std::chrono::milliseconds(0));
 
     // }}}
 }
