@@ -2,8 +2,9 @@
 A C++17 fast, storage-wise, header-only Entity Component System library.
 
 * fast-ecs is **fast** because it is cache-friendly: it organizes all the information it needs to iterate the entities and read the components in one single array. In my computer, it takes 0.005 us to iterate each entity (this is 0.000005ms!).
-* fast-ecs is **storage-wise** because it organizes all components in one single array without gaps. This way, no space is wasted.
+* fast-ecs is **storage-wise** because it organizes components in one single arrays without gaps. This way, no space is wasted.
 * fast-ecs is **header-only** - just include the header below and you're good to go! No need to link to external libraries.
+* fast-ecs is **multi-threaded** - systems that don't modify the components can run in parallel.
 
 This library was tested with the `g++` and `clang++` compilers.
 
@@ -32,40 +33,30 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ecs::Engine<
-	class System, ecs::NoGlobal, ecs::NoEventQueue, 
-	Position, Direction            // <-- component list
->;
+using MyECS = ecs::ECS<
+    ecs::NoGlobal, 
+    ecs::NoMessageQueue, 
+    ecs::NoPool, 
+    Position, Direction>;      // <-- Component list
 
 //
 // SYSTEMS
 //
 
-class System { 
-public:
-    virtual void execute(MyEngine& e) = 0;
-    virtual ~System() {}
-};
-
-class PositionSystem : public System {
-public:
-    void execute(MyEngine& e) override {
-        e.for_each<Position>([](MyEngine&, ecs::Entity const& entity, Position& pos) {
-            pos.x += 1;
-            std::cout << "Entity " << entity.get() << " position.x was " << pos.x -1 <<
-                         " but now is " << pos.x << ".\n";
-        });
+static void position_system(MyECS& ecs) {
+    for (auto& e: ecs.entities<Position>()) {
+        Position& pos = e.get<Position>();
+        pos.x += 1;
+        std::cout << "Entity " << e.id << " position.x was " << pos.x -1 <<
+                     " but now is " << pos.x << ".\n";
     }
-};
+}
 
-class DirectionSystem : public System {
-public:
-    void execute(MyEngine& e) override {
-        e.for_each<Direction>([](MyEngine&, ecs::Entity const& entity, Direction& dir) {
-            std::cout << "Entity " << entity.get() << " direction is " << dir.angle << ".\n";
-        });
+static void direction_system(MyECS const& ecs) {
+    for (auto const& e : ecs.entities<Direction>()) {
+        std::cout << "Entity " << e.id << " direction is " << e.get<Direction>().angle << ".\n";
     }
-};
+}
 
 //
 // MAIN PROCEDURE
@@ -73,23 +64,19 @@ public:
 
 int main()
 {
-    MyEngine e;
+    MyECS ecs;                                     // initialize engine
 
-    ecs::Entity e1 = e.add_entity(),
-                e2 = e.add_entity();
+    auto e1 = ecs.add(),                           // create entities
+         e2 = ecs.add();
 
-    e.add_component<Position>(e1, 20.f, 30.f);
-    e.add_component<Direction>(e1, 1.2f);
+    e1.add<Position>(20.f, 30.f);		   // add components
+    e1.add<Direction>(1.2f);
 
-    e.add_component<Position>(e2, 40.f, 50.f);
-    e.component<Position>(e2).x = 100.f;
+    e2.add<Position>(40.f, 50.f);
+    e2.get<Position>().x = 100.f;
 
-    e.add_system<PositionSystem>();
-    e.add_system<DirectionSystem>();
-
-    for(auto& sys: e.systems()) {
-        sys->execute(e);
-    }
+    ecs.run_mutable("position", position_system);  // run system that changes the components
+    ecs.run_st("direction", direction_system);     // run read-only system
 }
 ```
 
@@ -106,43 +93,54 @@ Entity 0 direction is 1.2.
 ## Engine management
 
 ```C++
-Engine<System, Global, Event, Components...>();   // create a new Engine
-// `System` is the parent class for all systems. 
-//     Use `ecs::NoSystem` if you don't want to use any systems.
+Engine<Global, Event, Pool, Components...>();   // create a new Engine
 // `Global` is a class for storing global data. In needs to be default constructive.
 //     Use `ecs::NoGlobal` if you don't want to use any systems.
 // `Event` is a variant type that contains all event types. It must be a std::variant<...>.
 //     Use `ecs::NoEventQueue` if you don't want to use an event queue.
+// `Pool` is an enum that contains the list of pools.
+//     Use `ecs::NoPool` if you don't want to use pools.
 // `Components...` is a list of all components (structs) that can be added to the Engine.
 //     They need to be copyable.
 
 // Since you'll want to use the engine declaration everywhere
 // (pass to functions, etc), it is better to use a type-alias:
-using MyEngine = ecs::Engine<System, Global, Event, Position, Direction>;
+using MyEngine = ecs::Engine<Global, Event, Pool, Position, Direction>;
 ```
 
 ## Entity management
 
 ```C++
-ecs::Entity add_entity(std::string name=""); // create a new entity, and return that entity identifier
-void        remove_entity(Entity ent);       // delete an entity
+Entity add([Pool pool]);      // Create a new entity, and return that entity identifier
+                              // Optionally, the entity can be added to a pool different than the default.
+void   remove(Entity ent);    // delete an entity
 ```
 
 `ecs::Entity` is simply a wrapper around a `size_t`, as the entity is simply a number. The
-real number can be read by using the entity `get()` method.
+real number can be read by using the entity `id` field.
 
-A name can be given to the entity. This is useful for one-of-a-kind entites. All later request
-can be referred using this name, such as:
+Pools can be used to separate entities and its components in different memory blocks. This
+is useful if there are different types of entities that have completely different uses (such
+as units vs particles, for example). This way, when the entities are iterated, they can optionally
+be iterated for just a single pool.
+
+The type `Entity` is a wrapper around an id, that allows to perform some operations on the entity,
+according to the following signature:
 
 ```C++
-e.add_entity("my_name");
-e.remove_entity("my_name");
+class Entity {
+    size_t     id;         // id number of the entity
+    Pool       pool;       // pool the entity was added to
 
-ecs::Entity entity_id = e.entity("my_name);
+    Component& add<Component>(...);   // Add a component to the entity, creating it with `...` parameters
+    Component& get<Component>();      // Return a previously created component
+    Component* get_ptr<Component>();  // Return a pointer to a component, or nullptr if the component
+                                      // doesn't exists
+    Component  remove<Component>();   // Remove a component
+    bool       has<Component>();      // Returns true if the entity has the component.
+    string     debug();               // Returns a textual description of the entity.
+}
 ```
-
-The library also provides a entity called `ecs::InvalidEntity`, that can be used to represent
-uninitialized references to entities.
 
 ## Component management
 
@@ -168,92 +166,86 @@ Avoid using pointers in components, as it defeats the porpouse of the high speed
 However, there are occasions where pointers are necessary - for example, when using an underlying 
 C library or inheritance. In this cases, since components need to be copyable, it is recommended to use
 `shared_ptr` instead of `unique_ptr` (obviously, never use naked pointers). A `unique_ptr` can be used,
-but in the cases all constructors (move, copy and assignment) need to be provided.
+but then all constructors (move, copy and assignment) need to be provided.
 
-Also, remember that entities and components might be moved within the array, so pointers to the components won't work. Always refer to the entities by their identifier (`ecs::Entity`) or name (`std::string`).
-
-```C++
-C&   add_component<C>(ecs::Entity entity, ...);   // add a new component to an entity, calling its constructor
-C&   add_component(ecs::Entity entity, C&& c);    // add a new existing component to an entity
-void remove_component<C>(ecs::Entity entity);     // remove component from entity
-
-bool has_component<C>(ecs::Entity entity);        // return true if entity contains a component
-C&   component<C>(ecs::Entity entity);            // return a reference to a component
-
-// When getting a component, it can be edited directly:
-e.component<Position>(my_entity).x = 10;
-
-// `component_ptr` will return a pointer for the component, or nullptr if it doesn't exist.
-// Thus, it can be used as a faster combination of `has_component` and `component`.
-C*   component_ptr<C>(ecs::Entity entity);
+Also, remember that entities and components might be moved within the array, so pointers to the
+components won't work. Always refer to the entities by their id.
 ```
 
 ## Iterating over entities
 
 ```C++
-void for_each<C...>([](Engine<...>& e, ecs::Entity entity, ...), bool iterate_inactive=false);
+vector<Entity> entities<Components...>([Pool pool]);  // Iterate over entities that contains these components.
+                                                      // If pool is not provided, iterate over all of them.
+						      // If components are not provided, iterate over all entnties.
 
 // Example:
-e.for_each<Position, Direction>([](MyEngine& e, ecs::Entity const& ent, Position& pos, Direction& dir) {
+for (auto& e: ecs.entities<Position, Direction>()) {
     // do something
-});
+}
 
-// There's also a const version of ForEach: 
-e.for_each<Position, Direction>([](MyEngine const& e, ecs::Entity const& ent, Position const& pos, Direction const& dir) {
-    // do something
-});
+// There's also a const version
+for (auto const& e: ecs.entities<Position, Direction>()) {
+    // do something - can't modify the components
+}
 
 // Iterate over all entities
-e.for_each([](MyEngine& e, ecs::Entity const& ent) {
+for (auto& e: ecs.entities()) {
     // do something
-});
+}
 ```
 
-The `for_each` function is the central piece of this ECS library, and a lot of care has been taken
+The `entities` method is the central piece of this ECS library, and a lot of care has been taken
 to make sure that it is as fast as possible.
-
-Entities can be set as active or inactive. They are created active by default. An inactive entity will
-not be iterated in `for_each`. This is useful in a game, for example, when there is a very large map
-but only the entities close to the player will move.
-
-Entities can be activated/deactivated with the following functions:
-
-```C++
-void set_entity_active(ecs::Entity ent, bool active);
-bool is_entity_active(ecs::Entity ent);
-```
-
-To iterate over all entities, active and inactive, pass `iterate_inactive` as true in the call to `for_each`.
 
 ## Systems
 
+Systems in `fast-ecs` have the following philosophy:
+  - run the systems that won't modify the components in parallel, and then the systems that modify components single-thread;
+  - this can be achieved by having the read-only systems to send messages, and then receive them in the single-threaded systems,
+    and then modify the components accordingly.
+
 ```C++
-// all systems must inherit from a single class
-struct System {
-    virtual void execute(MyEngine& e) = 0;
-    virtual ~System() {}
+// Systems can be functions or methods. They always need to receive the ECS object as its
+// first parameter:
+
+void my_system(MyECS& e, int x) {
+    // do something
 }
 
-struct MySystem : public System {
-    void execute(MyEngine& e) override {
+struct MySystemClass {
+    void my_system(MyECS& e, int x) {
         // do something
     }
-};
-
-System&         add_system<S>(...);    // add a new system (call constructor)
-System const&   system<S>() const;     // return a reference to a system
-vector<System*> systems();             // return a vector of systems to iterate, example:
-void            remove_system<S>();    // remove a previously added system
-
-/* The method `system<T>` returns a const referente to a system. It is used for one
-   system to read information from another system. To make one system modify data
-   in another system, use Events.  */
-
-for(auto& sys: e.systems()) {
-    sys->execute(e);
 }
 
-// You can only add one system of each type (class).
+// To execute the read-only systems in parallel, use the following method in ECS
+// to start the system in its own thread. Be aware that the entities will be const.
+
+void run_mt(string name, F function_ptr, Parameters...);              // function version
+void run_mt(string name, Object obj, F function_ptr, Parameters...);  // method version
+
+// example, using the systems defined above
+
+ecs.run_mt("my_system", my_system, 10);  // function version
+
+MySystemClass sys;                   // method version
+ecs.run_mt("my_system", sys, &MySystemClass::my_system, 10);
+
+ecs.join();     // threads MUST be joined before start to execute single-treaded systems
+
+// a method called `run_st` is provided to do the same, single threaded.
+
+// To execute the systems in a single thread, with the abiliy to read and write
+// entities, use the following:
+
+void run_mutable(string name, F function_ptr, Parameters...);              // function version
+void run_mutable(string name, Object obj, F function_ptr, Parameters...);  // method version
+
+// the methods on `run_mt` can be run single-threaded (for debugging, for example)
+// simply by setting ECS as single thread:
+
+ecs.set_threading(Threading::Single);
 ```
 
 ## Globals
@@ -270,44 +262,42 @@ struct GlobalData {
     int x;
 };
 
-using MyEngine = ecs::Engine<class System, GlobalData, ecs::NoQueue, MyComponent>;
+using MyEngine = ecs::Engine<GlobalData, ecs::NoMessageQueue, ecs::NoPool, MyComponent>;
 MyEngine e(42);
 
-std::cout << e.global().x << "\n";    // result: 42
-e.global().x = 8;
-std::cout << e.global().x << "\n";    // result: 8
+std::cout << e().x << "\n";    // result: 42
+e().x = 8;
+std::cout << e().x << "\n";    // result: 8
 ```
 
-## Event queues
+## Message queues
 
-Events queues can be used by a system to send messages to all systems. The message
+Message queues can be used by a system to send messages to all systems. The message
 type must be a `std::variant` that contains all message types.
 
 ```C++
 #include <variant>
 
 // Define the message types.
-struct EventDialog { std::string msg; };
-struct EventKill   { ecs::Entity id; };
-using EventType = std::variant<EventDialog, EventKill>;
+struct MessageDialog { std::string msg; };
+struct MessageKill   { ecs::Entity id; };
+using MessageType = std::variant<MessageDialog, MessageKill>;
 
 // Create engine passing this type.
-using MyEngine = ecs::Engine<System, EventType, MyComponents...>;
+using MyEngine = ecs::Engine<ecs::NoGlobal, MessageType, ecs::NoPool, MyComponents...>;
 MyEngine e;
 
-// Send an event to all systems.
-e.send_event(EventDialog { "Hello!" });
+// Send a message to all systems.
+e.add_message(MessageDialog { "Hello!" });
 
-// In the system, `events` can be used to read each of the messages in the event queue.
+// In the system, `messages` can be used to read each of the messages in the event queue.
 // This will not clear the events from the queue, as other system might want to read it as well.
-for (EventDialog const& ev: e.event_queue<EventDialog>()) {
-    // do something with `ev`...
+for (auto const& msg: ecs.messages<MessageDialog>()) {
+    // do something with `msg`...
 }
 
 // At the end of each loop, the queue must be cleared.
-for(auto& sys: e.systems())
-    sys->execute(e);
-e.clear_queue();
+ecs.clear_messages();
 ```
 
 ## Component printing
@@ -325,7 +315,7 @@ ostream& operator<<(ostream& out, Direction const& dir) {
 }
 
 // Then, to print all components of an entity:
-cout << e.debug_entity(my_entity) << "\n";
+cout << entity.debug() << "\n";
 
 // If the method `operator<<` is implemented to the Global type, global data
 // can be printed with:
@@ -340,17 +330,7 @@ cout << e.debug_all() << "\n";
 },
 ```
 
-A phrase describing the entity can be added with the function below. It'll be printed when
-the entity is debugged:
-
-```C++
-void set_entity_debugging_info(Entity ent, std::string text);
-```
-
 If the `operator<<` is not implemented for a component, the class name will be printed instead.
-
-By default, only the active entities will be printed when debugging all. To print everything,
-call `e.debug_all(true);`.
 
 ## Additional info:
 
@@ -360,7 +340,6 @@ The following methods provide additional info about the engine:
 size_t number_of_entities();
 size_t number_of_components();
 size_t number_of_event_types();
-size_t number_of_systems();
 size_t event_queue_size();
 ```
 
@@ -370,8 +349,7 @@ The library is destructed in the following order:
 
 1. Components
 2. Event queue
-3. Systems
-4. Global
+3. Global
 
 This means that, if a library you are using is in a system or in global, and the components
 contain the elements of the library, the elements are guaranteed to be destrcted before the
