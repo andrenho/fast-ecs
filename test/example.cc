@@ -28,38 +28,20 @@ using MyECS = ecs::ECS<
 // SYSTEMS
 //
 
-static void position_system(MyECS const& e) {
-    for (auto const& e: entities()) {
+static void position_system(MyECS& ecs) {
+    for (auto& e: ecs.entities<Position>()) {
+        Position& pos = e.get<Position>();
+        pos.x += 1;
+        std::cout << "Entity " << e.id << " position.x was " << pos.x -1 <<
+                     " but now is " << pos.x << ".\n";
     }
 }
 
-/*
-class System { 
-public:
-    virtual void Execute(MyECS& e) = 0;
-    virtual ~System() {}
-};
-
-class PositionSystem : public System {
-public:
-    void Execute(MyECS const& e) override {
-        e.for_each<Position>([](MyECS&, ecs::Entity const& entity, Position& pos) {
-            pos.x += 1;
-            std::cout << "Entity " << entity.get() << " position.x was " << pos.x -1 <<
-                         " but now is " << pos.x << ".\n";
-        });
+static void direction_system(MyECS const& ecs) {
+    for (auto const& e : ecs.entities<Direction>()) {
+        std::cout << "Entity " << e.id << " direction is " << e.get<Direction>().angle << ".\n";
     }
-};
-
-class DirectionSystem : public System {
-public:
-    void Execute(MyECS& e) override {
-        e.for_each<Direction>([](MyECS&, ecs::Entity const& entity, Direction& dir) {
-            std::cout << "Entity " << entity.get() << " direction is " << dir.angle << ".\n";
-        });
-    }
-};
-*/
+}
 
 //
 // MAIN PROCEDURE
@@ -67,25 +49,19 @@ public:
 
 int main()
 {
-    /*
-    MyECS e;
+    MyECS ecs;
 
-    auto e1 = e.add_entity(),
-         e2 = e.add_entity();
+    auto e1 = ecs.add(),
+         e2 = ecs.add();
 
-    e.add_component(e1, Position { 20.f, 30.f });
-    e.add_component(e1, Direction { 1.2f });
+    e1.add<Position>(20.f, 30.f);
+    e1.add<Direction>(1.2f);
 
-    e.add_component(e2, Position { 40.f, 50.f });
-    e.component<Position>(e2).x = 100.f;
+    e2.add<Position>(40.f, 50.f);
+    e2.get<Position>().x = 100.f;
 
-    e.add_system<PositionSystem>();
-    e.add_system<DirectionSystem>();
-
-    for(auto& sys: e.systems()) {
-        sys->Execute(e);
-    }
-    */
+    ecs.run_mutable("position", position_system);
+    ecs.run_st("direction", direction_system);
 }
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker

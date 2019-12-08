@@ -259,10 +259,12 @@ class ECS {
 
 public:
     template <typename... P>
-    explicit ECS(Threading threading, P&& ...pars) 
-        : _threading(threading), _global(Global { pars... }) {}
+    explicit ECS(P&& ...pars) 
+        : _global(Global { pars... }) {}
 
     ~ECS() { join(); }
+
+    void set_threading(Threading t)         { _threading = t; }
 
     // 
     // entities
@@ -813,9 +815,9 @@ private:
 
     using EntityPool = std::unordered_map<size_t, Pool>;
 
-    Threading                                      _threading;
     Global                                         _global;
-    mutable SyncQueue<Message>                     _messages              {};
+    Threading                                      _threading           = Threading::Multi;
+    mutable SyncQueue<Message>                     _messages            {};
     std::unordered_map<Pool, EntityPool>           _entity_pools        { { DefaultPool, {} } };
     std::unordered_map<Pool, ComponentTupleVector> _components          { { DefaultPool, {} } };
     size_t                                         _next_entity_id      = 0;

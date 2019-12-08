@@ -38,7 +38,7 @@ TEST_CASE("entities") {
     enum class Pool : int { My };
     
     struct C {};
-    ECS<NoGlobal, NoMessageQueue, Pool, C> ecs(Threading::Single);
+    ECS<NoGlobal, NoMessageQueue, Pool, C> ecs;
 
     auto e1 = ecs.add();
     CHECK(e1.id == 0);
@@ -78,7 +78,7 @@ TEST_CASE("entities") {
 TEST_CASE("components") {
     // {{{ ...
 
-    ECS<NoGlobal, NoMessageQueue, NoPool, Position, Direction> ecs(Threading::Single);
+    ECS<NoGlobal, NoMessageQueue, NoPool, Position, Direction> ecs;
 
     // set component
     Entity e1 = ecs.add();
@@ -116,7 +116,7 @@ TEST_CASE("iterate components") {
 
     enum class Pool { My };
     using MyECS = ECS<NoGlobal, NoMessageQueue, Pool, Position, Direction>;
-    MyECS ecs(Threading::Single);
+    MyECS ecs;
 
     Entity e1 = ecs.add();
     e1.add<Position>(34, 10);
@@ -170,7 +170,7 @@ TEST_CASE("globals") {
     // {{{ ...
 
     struct C {};
-    ECS<Global, NoMessageQueue, NoPool, C> ecs(Threading::Single);
+    ECS<Global, NoMessageQueue, NoPool, C> ecs;
 
     CHECK(ecs().x == 42);
     ecs().x = 24;
@@ -182,7 +182,7 @@ TEST_CASE("globals") {
 TEST_CASE("messages") {
     // {{{ ...
     struct C {};
-    ECS<NoGlobal, Message, NoPool, C> ecs(Threading::Single);
+    ECS<NoGlobal, Message, NoPool, C> ecs;
 
     ecs.add_message(MessageTypeA { 12 });
     ecs.add_message(MessageTypeA { 24 });
@@ -218,7 +218,7 @@ static void change_c(MyECS& ecs) {
 TEST_CASE("systems") {
     // {{{ ...
     
-    MyECS ecs(Threading::Multi);
+    MyECS ecs;
 
     Entity e1 = ecs.add();
     e1.add<C>();
@@ -294,7 +294,7 @@ inline ostream& operator<<(ostream& os, B const& b) { os << "y = '" << b.y << "'
 TEST_CASE("debugging") {
     // {{{ ...
 
-    ECS<Global, Message, NoPool, A, B> ecs(Threading::Single);
+    ECS<Global, Message, NoPool, A, B> ecs;
 
     auto e1 = ecs.add();
     e1.add<A>(24);
@@ -315,7 +315,7 @@ TEST_CASE("debugging") {
         CHECK(ecs.number_of_message_types() == 2);
         CHECK(ecs.message_queue_size() == 1);
 
-        ECS<Global, NoMessageQueue, NoPool, A, B> ecs2(Threading::Single);
+        ECS<Global, NoMessageQueue, NoPool, A, B> ecs2;
         CHECK(ecs2.number_of_message_types() == 0);
     }
 
@@ -325,13 +325,13 @@ TEST_CASE("debugging") {
 // uncomment one of the following commented lines on order to have a static error:
 
 struct GlobalNDC { GlobalNDC(int) {} };
-// ECS<GlobalNDC, NoMessageQueue, NoPool, A> e1(Threading::Single);
+// ECS<GlobalNDC, NoMessageQueue, NoPool, A> e1;
 
 struct D { D(D const&) = delete; };
-// ECS<NoGlobal, NoMessageQueue, NoPool, A, D> e1(Threading::Single);
+// ECS<NoGlobal, NoMessageQueue, NoPool, A, D> e1;
 
-// ECS<NoGlobal, NoPool, int, A> e3(Threading::Single);
+// ECS<NoGlobal, NoPool, int, A> e3;
 
-// int test() { ECS<NoGlobal, NoMessageQueue, NoPool, A> e(Threading::Single); e.add_component<B>(ecs::Entity { 0 }); };
+// int test() { ECS<NoGlobal, NoMessageQueue, NoPool, A> e; e.add_component<B>(ecs::Entity { 0 }); };
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
