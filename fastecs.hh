@@ -8,6 +8,7 @@
 #include <map>
 #include <mutex>
 #include <set>
+#include <sstream>
 #include <string>
 #include <variant>
 #include <unordered_map>
@@ -24,7 +25,7 @@ namespace ecs {
 enum class Threading { Single, Multi };
 enum class NoPool {};
 struct     NoGlobal {};
-using      NoEventQueue = std::variant<std::nullptr_t>;
+using      NoMessageQueue = std::variant<std::nullptr_t>;
 
 // {{{ exception class
 
@@ -36,31 +37,62 @@ public:
 
 // }}}
 
-// {{{ entity class
+// {{{ debug objects
+
+template <typename C>
+static std::string type_name() {
+    // {{{ ...
+    int status;
+    std::string tname = typeid(C).name();
+#ifndef NOABI
+    char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
+    if(status == 0) {
+        tname = demangled_name;
+        free(demangled_name);
+    }
+#endif
+    return tname;
+    // }}}
+}
+
+// check if class has operator<<
+template<typename T>
+struct has_ostream_method
+{
+private:
+    typedef std::true_type  yes;
+    typedef std::false_type no;
+
+    template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
+    template<typename> static no test(...);
+public:
+    static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
+};
+
+template <typename Obj>
+static std::string debug_object(Obj const& obj) {
+    // TODO - use ['...'] when there is an invalid character
+    std::stringstream ss;
+    ss << type_name<Obj>() << " = {";
+    if constexpr(has_ostream_method<Obj>::value)
+        ss << " " << obj << " ";
+    ss << "}, ";
+    return ss.str();
+}
+
+// }}}
+
+// {{{ entity classes
 
 template<typename ECS, typename Pool>
-class Entity {
+class ConstEntity {
 public:
-    Entity(size_t id, Pool pool, ECS* ecs) : id(id), pool(pool), ecs(ecs) {}    // TODO - visible only to ECS
-
-    template<typename C, typename... P>
-    C& add(P&& ...pars) {
-        return ecs->template add_component<C>(id, pool, pars...);
-    }
-
-    template<typename C>
-    C& get() {
-        return ecs->template component<C>(id, pool);
-    }
+    ConstEntity(size_t id, Pool pool, ECS const* ecs) 
+        : id(id), pool(pool), ecs(ecs) {}
 
     template<typename C>
     C const& get() const {
         return ecs->template component<C>(id, pool);
-    }
-
-    template<typename C>
-    C* get_ptr() {
-        return ecs->template component_ptr<C>(id, pool);
     }
 
     template<typename C>
@@ -73,53 +105,52 @@ public:
         return ecs->template has_component<C>(id, pool);
     }
 
-    template<typename C>
-    void remove() {
-        ecs->template remove_component<C>(id, pool);
+    std::string debug() const {
+        return ecs->debug_entity(id, pool);
     }
 
-    bool operator==(Entity const& other) const { return id == other.id; }
-    bool operator!=(Entity const& other) const { return id != other.id; }
+    bool operator==(ConstEntity const& other) const { return id == other.id; }
+    bool operator!=(ConstEntity const& other) const { return id != other.id; }
+    bool operator<(ConstEntity const& other) const { return id < other.id; }
 
-    const size_t id;
-    const Pool pool;
+    size_t id;   // TODO - make these two fields const
+    Pool pool;
+
+private:
+    ECS const* ecs;
+};
+
+
+template<typename ECS, typename Pool>
+class Entity : public ConstEntity<ECS, Pool> {
+public:
+    Entity(size_t id, Pool pool, ECS* ecs) 
+        : ConstEntity<ECS, Pool>(id, pool, ecs), ecs(ecs) {}
+
+    template<typename C, typename... P>
+    C& add(P&& ...pars) {
+        return ecs->template add_component<C>(this->id, this->pool, pars...);
+    }
+
+    template<typename C>
+    C& get() {
+        return ecs->template component<C>(this->id, this->pool);
+    }
+
+    template<typename C>
+    C* get_ptr() {
+        return ecs->template component_ptr<C>(this->id, this->pool);
+    }
+
+    template<typename C>
+    void remove() {
+        ecs->template remove_component<C>(this->id, this->pool);
+    }
 
 private:
     ECS* ecs;
 };
 
-
-template<typename ECS, typename Pool>
-class ConstEntity {
-public:
-    ConstEntity(size_t id, Pool pool, ECS const* ecs) : id(id), pool(pool), ecs(ecs) {}    // TODO - visible only to ECS
-
-    template<typename C>
-    C const& get() const {
-        return ecs->template component<C>(id, pool);
-    }
-
-    template<typename C>
-    C const* get_ptr() const {
-        return ecs->template component_ptr<C>(id, pool);
-    }
-
-    template<typename C>
-    bool has() const {
-        return ecs->template has_component<C>(id, pool);
-    }
-
-    bool operator==(ConstEntity const& other) const { return id == other.id; }
-    bool operator!=(ConstEntity const& other) const { return id != other.id; }
-    bool operator==(Entity<ECS, Pool> const& other) const { return id == other.id; }
-    bool operator!=(Entity<ECS, Pool> const& other) const { return id != other.id; }
-
-    const size_t id;
-    const Pool pool;
-
-private:
-    ECS const* ecs;
-};
 
 template<typename ECS, typename Pool>
 bool operator==(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { return a.id == b.id; }
@@ -164,9 +195,14 @@ public:
         queue_.clear();
     }
 
+    size_t size() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.size();
+    }
+
 private:
-    std::vector<T> queue_ {};
-    std::mutex mutex_     {};
+    std::vector<T>     queue_ {};
+    mutable std::mutex mutex_ {};
 };
 
 // }}}
@@ -217,9 +253,9 @@ private:
 
 // }}}
 
-template <typename Global, typename Event, typename Pool, typename... Components>
+template <typename Global, typename Message, typename Pool, typename... Components>
 class ECS {
-    using MyECS = ECS<Global, Event, Pool, Components...>;
+    using MyECS = ECS<Global, Message, Pool, Components...>;
 
 public:
     template <typename... P>
@@ -234,7 +270,7 @@ public:
 
     Entity<MyECS, Pool> add() {
         // {{{ ...
-        _entity_pools.at(DefaultPool).emplace(_next_entity_id, true);
+        _entity_pools.at(DefaultPool).emplace(_next_entity_id, DefaultPool);
         return Entity<MyECS, Pool>(_next_entity_id++, DefaultPool, this);
         // }}}
     }
@@ -242,7 +278,7 @@ public:
     Entity<MyECS, Pool> add(Pool pool) { 
         // {{{ ...
         auto it = _entity_pools.insert({ pool, {} }).first;
-        it->second.emplace(_next_entity_id, true);
+        it->second.emplace(_next_entity_id, pool);
         _pool_set.insert(pool);
         _components.insert({ pool, {} });
         return Entity<MyECS, Pool>(_next_entity_id++, pool, this);
@@ -323,12 +359,12 @@ public:
     // messages 
     //
 
-    void add_message(Event&& e) const { 
+    void add_message(Message&& e) const { 
         // {{{ ...
         if (_running_mt)
-            _events.push_sync(std::move(e));
+            _messages.push_sync(std::move(e));
         else
-            _events.push_nosync(std::move(e));
+            _messages.push_nosync(std::move(e));
         // }}}
     }
         
@@ -336,14 +372,14 @@ public:
     std::vector<T> messages() {   // non-const by design
         // {{{ ...
         std::vector<T> r;
-        for (auto ev : _events.underlying_vector())
+        for (auto ev : _messages.underlying_vector())
             if (std::holds_alternative<T>(ev))
                 r.push_back(std::get<T>(ev));
         return r;
         // }}}
     }
 
-    void clear_messages()                       { _events.clear(); }
+    void clear_messages()                       { _messages.clear(); }
 
     //
     // systems
@@ -374,8 +410,7 @@ public:
         // }}}
     }
 
-    template<typename O, typename F, typename... P,
-        class = typename std::enable_if<std::is_class<O>::value>::type>
+    template<typename O, typename F, typename... P, class = typename std::enable_if<std::is_class<O>::value>::type>
     void run_st(std::string const& name, O& obj, F f, P&& ...pars) const { 
         // {{{ ...
         auto start = now();
@@ -393,8 +428,7 @@ public:
         // }}}
     }
 
-    template<typename O, typename F, typename... P,
-        class = typename std::enable_if<std::is_class<O>::value>::type>
+    template<typename O, typename F, typename... P, class = typename std::enable_if<std::is_class<O>::value>::type>
     void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) { 
         // {{{ ...
         auto start = now();
@@ -423,8 +457,7 @@ public:
         // }}}
     }
 
-    template<typename O, typename F, typename... P,
-        class = typename std::enable_if<std::is_class<O>::value>::type>
+    template<typename O, typename F, typename... P, class = typename std::enable_if<std::is_class<O>::value>::type>
     void run_mt(std::string const& name, O& obj, F f, P&& ...pars) const { 
         // {{{ ...
         static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)), 
@@ -451,27 +484,41 @@ public:
         // }}}
     }
 
-    // {{{ debugging
+    friend class ConstEntity<ECS, Pool>;
+    friend class Entity<ECS, Pool>;
 
-    template <typename C>
-    static std::string type_name() {
+    // 
+    // debugging
+    //
+
+    std::string debug_entities(size_t spaces=0) const            { return debug_entities(_pool_set, spaces); }
+    std::string debug_entities(Pool pool, size_t spaces=0) const { return debug_entities(std::vector<Pool> { pool }, spaces); }
+
+    std::string debug_global() const {
         // {{{ ...
-        int status;
-        std::string tname = typeid(C).name();
-#ifndef NOABI
-        char *demangled_name = abi::__cxa_demangle(tname.c_str(), nullptr, nullptr, &status);
-        if(status == 0) {
-            tname = demangled_name;
-            free(demangled_name);
-        }
-#endif
-        return tname;
+        std::stringstream ss;
+        ss << "{ " << _global << " }";
+        return ss.str();
         // }}}
     }
 
-    // }}}
+    std::string debug_all() const {
+        // {{{
+        return std::string("{\n   global = ") + debug_global() + ",\n"
+            "   entities = " + debug_entities(_pool_set, 3) + "\n}";
+        // }}}
+    }
 
-    friend class Entity<ECS, Pool>;
+    size_t number_of_entities() const               { return size_to_reserve(_pool_set); }
+    size_t number_of_components() const             { return std::tuple_size<ComponentTupleVector>::value; }
+    size_t number_of_message_types() const {
+        // {{{ ...
+        if constexpr (std::is_same<Message, NoMessageQueue>::value)
+            return 0;
+        return std::variant_size_v<Message>;
+        // }}}
+    }
+    size_t message_queue_size() const               { return _messages.size(); }
 
 private:
 
@@ -493,7 +540,7 @@ private:
 
     template <typename>      struct is_std_variant : std::false_type {};
     template <typename... T> struct is_std_variant<std::variant<T...>> : std::true_type {};
-    static_assert(is_std_variant<Event>::value, "Event must be a std::variant<...>.");
+    static_assert(is_std_variant<Message>::value, "Message must be a std::variant<...>.");
 
 #pragma GCC diagnostic pop
 
@@ -505,20 +552,6 @@ private:
 
     // check if pool is an enum
     static_assert(std::is_enum_v<Pool>, "Pool must be an enum.");
-
-    // check if class has operator<<
-    template<typename T>
-    struct has_ostream_method
-    {
-    private:
-        typedef std::true_type  yes;
-        typedef std::false_type no;
-
-        template<typename U> static auto test(int) -> decltype(std::declval<std::ostream&>() << std::declval<U>(), yes());
-        template<typename> static no test(...);
-    public:
-        static constexpr bool value = std::is_same<decltype(test<T>(0)),yes>::value;
-    };
 
     // }}}
 
@@ -541,8 +574,37 @@ private:
 
     // TODO - the methods below are repeated for const and non-const. Can this be fixed?
 
+    template <typename Pools>
+    std::vector<ConstEntity<ECS, Pool>> find_matching_entities(Pools const& pools) const {
+        // {{{ ...
+        size_t size = size_to_reserve(pools);
+        std::vector<ConstEntity<ECS, Pool>> entities;
+        entities.reserve(size);
+        for (auto const& pool: pools)
+            for (auto [id,_]: _entity_pools.at(pool))
+                entities.emplace_back(id, pool, this);
+        return entities;
+        // }}}
+    }
+    
+    template <typename Pools>
+    std::vector<Entity<ECS, Pool>> find_matching_entities(Pools const& pools) {
+        // {{{ ...
+        size_t size = size_to_reserve(pools);
+        std::vector<Entity<ECS, Pool>> entities;
+        entities.reserve(size);
+        for (auto const& pool: pools)
+            for (auto [id,_]: _entity_pools.at(pool))
+                entities.emplace_back(id, pool, this);
+        return entities;
+        // }}}
+    }
+    
+    // TODO - the methods below are repeated for const and non-const. Can this be fixed?
+
     template <typename... C, typename Pools>
     std::vector<Entity<ECS, Pool>> find_matching_entities_component(Pools const& pools) {
+        // {{{ ...
         ((check_component<C>(), ...));
 
         size_t size = size_to_reserve(pools);
@@ -578,10 +640,12 @@ private:
             }
         }
         return entities;
+        // }}}
     }
 
     template <typename... C, typename Pools>
     std::vector<ConstEntity<ECS, Pool>> find_matching_entities_component(Pools const& pools) const {
+        // {{{ ...
         ((check_component<C>(), ...));
 
         size_t size = size_to_reserve(pools);
@@ -617,34 +681,9 @@ private:
             }
         }
         return entities;
+        // }}}
     }
 
-    template <typename Pools>
-    std::vector<ConstEntity<ECS, Pool>> find_matching_entities(Pools const& pools) const {
-        // {{{ ...
-        size_t size = size_to_reserve(pools);
-        std::vector<ConstEntity<ECS, Pool>> entities;
-        entities.reserve(size);
-        for (auto const& pool: pools)
-            for (auto [id,_]: _entity_pools.at(pool))
-                entities.emplace_back(id, pool, this);
-        return entities;
-        // }}}
-    }
-    
-    template <typename Pools>
-    std::vector<Entity<ECS, Pool>> find_matching_entities(Pools const& pools) {
-        // {{{ ...
-        size_t size = size_to_reserve(pools);
-        std::vector<Entity<ECS, Pool>> entities;
-        entities.reserve(size);
-        for (auto const& pool: pools)
-            for (auto [id,_]: _entity_pools.at(pool))
-                entities.emplace_back(id, pool, this);
-        return entities;
-        // }}}
-    }
-    
     // }}}
 
     // {{{ private methods (components)
@@ -735,13 +774,48 @@ private:
 
     // }}}
 
+    // {{{ private methods (debugging)
+
+    template <typename C>
+    std::string debug_component(size_t id) const 
+    {
+        check_component<C>();
+        return "{ " + debug_object<C>(component<C>(id)) + "}";
+    }
+
+    std::string debug_entity(size_t id, Pool pool, size_t spaces=0) const
+    {
+        std::string s = std::string(spaces, ' ') + "{ ";
+        ((s += has_component<Components>(id, pool) ? debug_object<Components>(component<Components>(id, pool)) : ""), ...);
+        return s + "}";
+    }
+
+    template <typename T>
+    std::string debug_entities(T const& pools, size_t spaces=0) const
+    {
+        // {{{ ...
+        auto entities = find_matching_entities(pools);
+        std::sort(entities.begin(), entities.end());
+
+        std::string s = "{\n";
+        for (auto const& ent : entities) {
+            s += std::string(spaces, ' ') + std::string("   [");
+            s += std::to_string(ent.id);
+            s += "] = " + ent.debug() + ",\n";
+        }
+        return s + std::string(spaces, ' ') + "}";
+        // }}}
+    }
+
+    // }}}
+
     // {{{ private data
 
-    using EntityPool = std::unordered_map<size_t, bool>;
+    using EntityPool = std::unordered_map<size_t, Pool>;
 
     Threading                                      _threading;
     Global                                         _global;
-    mutable SyncQueue<Event>                       _events              {};
+    mutable SyncQueue<Message>                     _messages              {};
     std::unordered_map<Pool, EntityPool>           _entity_pools        { { DefaultPool, {} } };
     std::unordered_map<Pool, ComponentTupleVector> _components          { { DefaultPool, {} } };
     size_t                                         _next_entity_id      = 0;

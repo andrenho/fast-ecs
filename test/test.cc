@@ -21,16 +21,24 @@ struct Direction {
     std::string dir;
 };
 
+struct Global {
+    int x = 42;
+};
+inline ostream& operator<<(ostream& os, Global const& g) { os << "x = " << g.x; return os; }
+
+struct MessageTypeA { size_t id; };
+struct MessageTypeB { string abc; };
+using Message = variant<MessageTypeA, MessageTypeB>;
+
 // }}}
 
-/*
 TEST_CASE("entities") { 
     // {{{...
 
     enum class Pool : int { My };
     
     struct C {};
-    ECS<NoGlobal, NoEventQueue, Pool, C> ecs(Threading::Single);
+    ECS<NoGlobal, NoMessageQueue, Pool, C> ecs(Threading::Single);
 
     auto e1 = ecs.add();
     CHECK(e1.id == 0);
@@ -66,12 +74,11 @@ TEST_CASE("entities") {
 
     // }}}
 }
-*/
 
 TEST_CASE("components") {
     // {{{ ...
 
-    ECS<NoGlobal, NoEventQueue, NoPool, Position, Direction> ecs(Threading::Single);
+    ECS<NoGlobal, NoMessageQueue, NoPool, Position, Direction> ecs(Threading::Single);
 
     // set component
     Entity e1 = ecs.add();
@@ -108,7 +115,7 @@ TEST_CASE("iterate components") {
     // {{{ ...
 
     enum class Pool { My };
-    using MyECS = ECS<NoGlobal, NoEventQueue, Pool, Position, Direction>;
+    using MyECS = ECS<NoGlobal, NoMessageQueue, Pool, Position, Direction>;
     MyECS ecs(Threading::Single);
 
     Entity e1 = ecs.add();
@@ -162,12 +169,8 @@ TEST_CASE("iterate components") {
 TEST_CASE("globals") {
     // {{{ ...
 
-    struct Global {
-        int x = 42;
-    };
-
     struct C {};
-    ECS<Global, NoEventQueue, NoPool, C> ecs(Threading::Single);
+    ECS<Global, NoMessageQueue, NoPool, C> ecs(Threading::Single);
 
     CHECK(ecs().x == 42);
     ecs().x = 24;
@@ -178,32 +181,28 @@ TEST_CASE("globals") {
 
 TEST_CASE("messages") {
     // {{{ ...
-    struct EventTypeA { size_t id; };
-    struct EventTypeB { string abc; };
-    using Event = variant<EventTypeA, EventTypeB>;
-
     struct C {};
-    ECS<NoGlobal, Event, NoPool, C> ecs(Threading::Single);
+    ECS<NoGlobal, Message, NoPool, C> ecs(Threading::Single);
 
-    ecs.add_message(EventTypeA { 12 });
-    ecs.add_message(EventTypeA { 24 });
-    ecs.add_message(EventTypeB { "Hello" });
-    CHECK(ecs.messages<EventTypeA>().size() == 2);
-    CHECK(ecs.messages<EventTypeA>().at(0).id == 12);
-    CHECK(ecs.messages<EventTypeA>().at(1).id == 24);
-    CHECK(ecs.messages<EventTypeA>().at(1).id == 24);
-    CHECK(ecs.messages<EventTypeB>().at(0).abc == "Hello");
+    ecs.add_message(MessageTypeA { 12 });
+    ecs.add_message(MessageTypeA { 24 });
+    ecs.add_message(MessageTypeB { "Hello" });
+    CHECK(ecs.messages<MessageTypeA>().size() == 2);
+    CHECK(ecs.messages<MessageTypeA>().at(0).id == 12);
+    CHECK(ecs.messages<MessageTypeA>().at(1).id == 24);
+    CHECK(ecs.messages<MessageTypeA>().at(1).id == 24);
+    CHECK(ecs.messages<MessageTypeB>().at(0).abc == "Hello");
 
     ecs.clear_messages();
-    CHECK(ecs.messages<EventTypeA>().empty());
-    CHECK(ecs.messages<EventTypeB>().empty());
+    CHECK(ecs.messages<MessageTypeA>().empty());
+    CHECK(ecs.messages<MessageTypeB>().empty());
     // }}}
 }
 
 // {{{ helper for systems
 
 struct C { int value = 0; };
-using MyECS = ECS<NoGlobal, NoEventQueue, NoPool, C>;
+using MyECS = ECS<NoGlobal, NoMessageQueue, NoPool, C>;
 
 static void my_add(MyECS const&, int& x) {
     ++x;
@@ -280,39 +279,44 @@ TEST_CASE("systems") {
     // }}}
 }
 
-/*  TODO
+// {{{ helper components
+
+struct A { 
+    int x;
+};
+inline ostream& operator<<(ostream& os, A const& a) { os << "x = " << a.x; return os; }
+
+struct B { string y; };
+inline ostream& operator<<(ostream& os, B const& b) { os << "y = '" << b.y << "'"; return os; }
+
+// }}}
 
 TEST_CASE("debugging") {
     // {{{ ...
 
-    using MyEngine = Engine<System, Global, Event, A, B>;
-    MyEngine e;
+    ECS<Global, Message, NoPool, A, B> ecs(Threading::Single);
 
-    Entity id = e.add_entity();
-    e.add_component<A>(id, 24);
-    e.add_component<B>(id, "hello");
+    auto e1 = ecs.add();
+    e1.add<A>(24);
+    e1.add<B>("hello");
 
-    e.add_entity("myent");
-    e.add_component<A>("myent", 24);
-    e.set_entity_debugging_info("myent", "Debugging info");
+    auto e2 = ecs.add();
+    e2.add<A>(42);
 
-    e.add_system<TestSystem>(2);
-
-    e.send_event(EventTypeA { 10 });
+    ecs.add_message(MessageTypeA { 10 });
 
     SUBCASE("debug") {
-        cout << e.debug_all() << "\n";
+        cout << ecs.debug_all() << "\n";
     }
 
     SUBCASE("info") {
-        CHECK(e.number_of_entities() == 2);
-        CHECK(e.number_of_components() == 2);
-        CHECK(e.number_of_systems() == 1);
-        CHECK(e.number_of_event_types() == 2);
-        CHECK(e.event_queue_size() == 1);
+        CHECK(ecs.number_of_entities() == 2);
+        CHECK(ecs.number_of_components() == 2);
+        CHECK(ecs.number_of_message_types() == 2);
+        CHECK(ecs.message_queue_size() == 1);
 
-        Engine<System, Global, NoEventQueue, A, B> e2;
-        CHECK(e2.number_of_event_types() == 0);
+        ECS<Global, NoMessageQueue, NoPool, A, B> ecs2(Threading::Single);
+        CHECK(ecs2.number_of_message_types() == 0);
     }
 
     // }}}
@@ -321,15 +325,13 @@ TEST_CASE("debugging") {
 // uncomment one of the following commented lines on order to have a static error:
 
 struct GlobalNDC { GlobalNDC(int) {} };
-// Engine<NoSystem, GlobalNDC, NoEventQueue, A> e1;
+// ECS<GlobalNDC, NoMessageQueue, NoPool, A> e1(Threading::Single);
 
 struct D { D(D const&) = delete; };
-// Engine<NoSystem, NoGlobal, NoEventQueue, A, D> e2;
+// ECS<NoGlobal, NoMessageQueue, NoPool, A, D> e1(Threading::Single);
 
-// Engine<NoSystem, NoGlobal, int, A> e3;
+// ECS<NoGlobal, NoPool, int, A> e3(Threading::Single);
 
-// int test() { Engine<NoSystem, NoGlobal, NoEventQueue, A> e; e.add_component<B>(ecs::Entity { 0 }); };
-
-*/
+// int test() { ECS<NoGlobal, NoMessageQueue, NoPool, A> e(Threading::Single); e.add_component<B>(ecs::Entity { 0 }); };
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
