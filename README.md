@@ -1,3 +1,6 @@
+_A new version was released in 08/dec/2019. This version breaks compatibility with the previous one.
+It simplifies many of the calls and allows for parallelization._
+
 # fast-ecs
 A C++17 fast, storage-wise, header-only Entity Component System library.
 
