@@ -10,6 +10,11 @@ using namespace ecs;
 
 struct Position {
     int x, y;
+    Position(Position const& pos) : x(pos.x), y(pos.y) {
+        cout << "Position copied.\n";
+    }
+
+    Position(int x, int y) : x(x), y(y) {}
 };
 
 struct Direction {
@@ -18,6 +23,7 @@ struct Direction {
 
 // }}}
 
+/*
 TEST_CASE("entities") { 
     // {{{...
 
@@ -60,6 +66,7 @@ TEST_CASE("entities") {
 
     // }}}
 }
+*/
 
 TEST_CASE("components") {
     // {{{ ...
@@ -68,8 +75,8 @@ TEST_CASE("components") {
 
     // set component
     Entity e1 = ecs.add();
-    e1.add(Position { 4, 5 });
-    e1.add(Direction { "N" });
+    e1.add<Position>(4, 5);
+    e1.add<Direction>("N");
     CHECK(e1.get<Position>().x == 4);
     CHECK(e1.get<Position>().y == 5);
 
@@ -101,14 +108,15 @@ TEST_CASE("iterate components") {
     // {{{ ...
 
     enum class Pool { My };
-    ECS<NoGlobal, NoEventQueue, Pool, Position, Direction> ecs(Threading::Single);
+    using MyECS = ECS<NoGlobal, NoEventQueue, Pool, Position, Direction>;
+    MyECS ecs(Threading::Single);
 
     Entity e1 = ecs.add();
-    e1.add(Position { 34, 10 });
-    e1.add(Direction { "N" });
+    e1.add<Position>(34, 10);
+    e1.add<Direction>("N");
     
     Entity e2 = ecs.add(Pool::My);
-    e2.add(Position { 12, 20 });
+    e2.add<Position>(12, 20);
 
     size_t count = 0;
     for (auto const& e : ecs.entities<Position>()) {
@@ -132,10 +140,10 @@ TEST_CASE("iterate components") {
     CHECK(count == 1);
 
     // const iteration
-    const ECS ecs_const = ecs;
+    const MyECS &ecs_const = ecs;
 
     count = 0;
-    for (auto const& e : ecs_const.entities())
+    for (auto const& _ : ecs_const.entities())
         ++count;
     CHECK(count == 2);
     
@@ -177,7 +185,6 @@ TEST_CASE("messages") {
     struct C {};
     ECS<NoGlobal, Event, NoPool, C> ecs(Threading::Single);
 
-    /*
     ecs.add_message(EventTypeA { 12 });
     ecs.add_message(EventTypeA { 24 });
     ecs.add_message(EventTypeB { "Hello" });
@@ -190,11 +197,9 @@ TEST_CASE("messages") {
     ecs.clear_messages();
     CHECK(ecs.messages<EventTypeA>().empty());
     CHECK(ecs.messages<EventTypeB>().empty());
-    */
     // }}}
 }
 
-/*
 // {{{ helper for systems
 
 struct C { int value = 0; };
@@ -205,7 +210,7 @@ void my_add(MyECS const& ecs, int& x) {
 }
 
 void change_c(MyECS& ecs) {
-    for (Entity& e : ecs.entities<C>())
+    for (auto& e : ecs.entities<C>())
         ++e.get<C>().value;
 }
 
@@ -226,6 +231,7 @@ TEST_CASE("systems") {
         }
     };
 
+    /*
     ecs.start_frame();
     
     // single threaded
@@ -270,11 +276,10 @@ TEST_CASE("systems") {
     auto timer_mt = ecs.timer_mt();
     CHECK(timer_mt.at("wait1") > 0);
     CHECK(timer_mt.at("wait2") > 0);
+    */
 
     // }}}
 }
-
-*/
 
 /*  TODO
 

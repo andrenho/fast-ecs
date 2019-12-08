@@ -2,10 +2,11 @@
 #define FASTECS_HH_
 
 #include <algorithm>
+#include <condition_variable>
 #include <chrono> 
 #include <limits>
-#include <queue>
 #include <map>
+#include <mutex>
 #include <set>
 #include <string>
 #include <variant>
@@ -42,9 +43,9 @@ class Entity {
 public:
     Entity(size_t id, Pool pool, ECS* ecs) : id(id), pool(pool), ecs(ecs) {}    // TODO - visible only to ECS
 
-    template<typename C>
-    C& add(C&& c) {
-        return ecs->add_component(id, pool, std::move(c));
+    template<typename C, typename... P>
+    C& add(P&& ...pars) {
+        return ecs->template add_component<C>(id, pool, pars...);
     }
 
     template<typename C>
@@ -127,13 +128,57 @@ bool operator!=(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { r
 
 // }}}
 
+// {{{ synchronized queue
+
+template <typename T>
+class SyncQueue {
+public:
+	void push_sync(const T& item)
+	{
+        std::lock_guard<std::mutex> lock(mutex_);
+		queue_.push_back(item);
+	}
+
+	void push_sync(T&& item)
+	{
+        std::lock_guard<std::mutex> lock(mutex_);
+		queue_.push_back(std::move(item));
+	}
+
+    void push_nosync(const T& item)
+    {
+        queue_.push_back(item);
+    }
+
+    void push_nosync(T&& item)
+    {
+        queue_.push_back(std::move(item));
+    }
+
+    std::vector<T> const& underlying_vector() const { 
+        return queue_;
+    }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.clear();
+    }
+
+private:
+    std::vector<T> queue_;
+    std::mutex mutex_;
+};
+
+// }}}
+
 template <typename Global, typename Event, typename Pool, typename... Components>
 class ECS {
     using MyECS = ECS<Global, Event, Pool, Components...>;
 
 public:
     template <typename... P>
-    explicit ECS(Threading threading, P&& ...pars) : _global(Global { pars... }) {}
+    explicit ECS(Threading threading, P&& ...pars) 
+        : _threading(threading), _global(Global { pars... }) {}
 
     // 
     // entities
@@ -163,7 +208,9 @@ public:
         // }}}
     }
 
+    //
     // iteration
+    //
 
     std::vector<Entity<ECS, Pool>> entities() {
         return find_matching_entities(_pool_set);
@@ -201,19 +248,38 @@ public:
         return find_matching_entities_component<T...>(std::vector<Pool> { pool });
     }
 
-    // {{{ globals
+    //
+    // globals
+    //
 
     Global& operator()()             { return _global; }
     Global const& operator()() const { return _global; }
 
-    // }}}
+    //
+    // messages 
+    //
 
-    // {{{ messages 
-
-    void           add_message(Event&& e) const {}  // TODO
+    void add_message(Event&& e) const { 
+        // {{{ ...
+        if (_running_mt)
+            _events.push_sync(std::move(e));
+        else
+            _events.push_nosync(std::move(e));
+        // }}}
+    }
+        
     template<typename T>
-    std::vector<T> messages() const {}  // TODO - change container type
-    void           clear_messages() {}  // TODO
+    std::vector<T> messages() {   // non-const by design
+        std::vector<T> r;
+        for (auto ev : _events.underlying_vector())
+            if (std::holds_alternative<T>(ev))
+                r.push_back(std::get<T>(ev));
+        return r;
+    }
+
+    void clear_messages() {
+        _events.clear();
+    }
 
     // }}}
 
@@ -460,8 +526,8 @@ private:
 
     // {{{ private methods (components)
 
-    template<typename C>
-    C& add_component(size_t id, Pool pool, C&& c) {
+    template<typename C, typename... P>
+    C& add_component(size_t id, Pool pool, P&& ...pars) {
         // {{{ ...
         check_component<C>();
 
@@ -472,7 +538,7 @@ private:
         if (it != vec.end() && it->first == id)
             throw ECSError(std::string("Component '") + type_name<C>() + "' already exist for entity " + std::to_string(id) + ".");
 
-        return vec.insert(it, { id, c })->second;
+        return vec.emplace(it, id, C { pars... })->second;
         // }}}
     }
 
@@ -550,12 +616,14 @@ private:
 
     using EntityPool = std::unordered_map<size_t, bool>;
 
-    Global                                         _global              {};
-    std::vector<Event>                             _events              {};
+    Threading                                      _threading;
+    Global                                         _global;
+    mutable SyncQueue<Event>                       _events              {};
     std::unordered_map<Pool, EntityPool>           _entity_pools        { { DefaultPool, {} } };
     std::unordered_map<Pool, ComponentTupleVector> _components          { { DefaultPool, {} } };
     size_t                                         _next_entity_id      = 0;
     std::set<Pool>                                 _pool_set            { DefaultPool };
+    bool                                           _running_mt          = false;
 
     static constexpr Pool DefaultPool = static_cast<Pool>(std::numeric_limits<typename std::underlying_type<Pool>::type>::max());
 
