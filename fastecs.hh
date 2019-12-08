@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono> 
 #include <limits>
+#include <queue>
 #include <map>
 #include <set>
 #include <string>
@@ -348,6 +349,8 @@ private:
             size += _entity_pools.at(pool).size();
         return size;
     }
+
+    // TODO - the methods below are repeated for const and non-const. Can this be fixed?
 
     template <typename... C, typename Pools>
     std::vector<Entity<ECS, Pool>> find_matching_entities_component(Pools const& pools) {

@@ -168,7 +168,6 @@ TEST_CASE("globals") {
     // }}}
 }
 
-/*
 TEST_CASE("messages") {
     // {{{ ...
     struct EventTypeA { size_t id; };
@@ -178,6 +177,7 @@ TEST_CASE("messages") {
     struct C {};
     ECS<NoGlobal, Event, NoPool, C> ecs(Threading::Single);
 
+    /*
     ecs.add_message(EventTypeA { 12 });
     ecs.add_message(EventTypeA { 24 });
     ecs.add_message(EventTypeB { "Hello" });
@@ -190,9 +190,11 @@ TEST_CASE("messages") {
     ecs.clear_messages();
     CHECK(ecs.messages<EventTypeA>().empty());
     CHECK(ecs.messages<EventTypeB>().empty());
+    */
     // }}}
 }
 
+/*
 // {{{ helper for systems
 
 struct C { int value = 0; };
