@@ -18,22 +18,32 @@ struct Direction {
 // ENGINE
 //
 
-using MyEngine = ecs::Engine<class System, ecs::NoGlobal, ecs::NoEventQueue, Position, Direction>;
+using MyECS = ecs::ECS<
+    ecs::NoGlobal, 
+    ecs::NoMessageQueue, 
+    ecs::NoPool, 
+    Position, Direction>;
 
 //
 // SYSTEMS
 //
 
+static void position_system(MyECS const& e) {
+    for (auto const& e: entities()) {
+    }
+}
+
+/*
 class System { 
 public:
-    virtual void Execute(MyEngine& e) = 0;
+    virtual void Execute(MyECS& e) = 0;
     virtual ~System() {}
 };
 
 class PositionSystem : public System {
 public:
-    void Execute(MyEngine& e) override {
-        e.for_each<Position>([](MyEngine&, ecs::Entity const& entity, Position& pos) {
+    void Execute(MyECS const& e) override {
+        e.for_each<Position>([](MyECS&, ecs::Entity const& entity, Position& pos) {
             pos.x += 1;
             std::cout << "Entity " << entity.get() << " position.x was " << pos.x -1 <<
                          " but now is " << pos.x << ".\n";
@@ -43,12 +53,13 @@ public:
 
 class DirectionSystem : public System {
 public:
-    void Execute(MyEngine& e) override {
-        e.for_each<Direction>([](MyEngine&, ecs::Entity const& entity, Direction& dir) {
+    void Execute(MyECS& e) override {
+        e.for_each<Direction>([](MyECS&, ecs::Entity const& entity, Direction& dir) {
             std::cout << "Entity " << entity.get() << " direction is " << dir.angle << ".\n";
         });
     }
 };
+*/
 
 //
 // MAIN PROCEDURE
@@ -56,7 +67,8 @@ public:
 
 int main()
 {
-    MyEngine e;
+    /*
+    MyECS e;
 
     auto e1 = e.add_entity(),
          e2 = e.add_entity();
@@ -73,6 +85,7 @@ int main()
     for(auto& sys: e.systems()) {
         sys->Execute(e);
     }
+    */
 }
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
