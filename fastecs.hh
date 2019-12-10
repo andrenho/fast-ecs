@@ -209,6 +209,11 @@ private:
 
 // {{{ timer
 
+struct SystemTime {
+    std::string               name;
+    std::chrono::microseconds us;
+};
+
 class Timer {
 public:
     void start_frame() {
@@ -223,30 +228,32 @@ public:
         _iterations = 0;
     }
 
-    void add_time(std::string const& name, std::chrono::milliseconds ms, bool mt) {
+    void add_time(std::string const& name, std::chrono::microseconds us, bool mt) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             auto& timer = mt ? _timer_mt : _timer_st;
-            auto it = timer.find(name);
+            auto it = std::find_if(timer.begin(), timer.end(), 
+                    [&name](SystemTime const& s) { return s.name == name; });
             if (it == timer.end())
-                timer.insert({ name, ms });
+                timer.push_back({ name, us });
             else
-                it->second += ms;
+                it->us += us;
         }
         if (mt)
-            add_time("multithreaded", ms, false);
+            add_time("multithreaded", us, false);
     }
 
-    std::map<std::string, std::chrono::milliseconds> timer(bool mt) const {
-        std::map<std::string, std::chrono::milliseconds> t;
-        for (auto const& [name, ms]: (mt ? _timer_mt : _timer_st))
-            t.insert({ name, ms / _iterations });
+    std::vector<SystemTime> timer(bool mt) const {
+        auto& timer = (mt ? _timer_mt : _timer_st);
+        std::vector<SystemTime> t(timer.begin(), timer.end());
+        for (auto& [_, us]: t)
+            us /= _iterations;
         return t;
     }
 
 private:
-    std::map<std::string, std::chrono::milliseconds> _timer_mt {};
-    std::map<std::string, std::chrono::milliseconds> _timer_st {};
+    std::vector<SystemTime> _timer_mt {};
+    std::vector<SystemTime> _timer_st {};
     size_t _iterations = 0;
     std::mutex mutex_ {};
 };
@@ -258,6 +265,9 @@ class ECS {
     using MyECS = ECS<Global, Message, Pool, Components...>;
 
 public:
+    using EntityType = Entity<MyECS, Pool>;
+    using ConstEntityType = ConstEntity<MyECS, Pool>;
+
     template <typename... P>
     explicit ECS(P&& ...pars) 
         : _global(Global { pars... }) {}
@@ -273,6 +283,7 @@ public:
     Entity<MyECS, Pool> add() {
         // {{{ ...
         _entity_pools.at(DefaultPool).emplace(_next_entity_id, DefaultPool);
+        _entities.emplace(_next_entity_id, DefaultPool);
         return Entity<MyECS, Pool>(_next_entity_id++, DefaultPool, this);
         // }}}
     }
@@ -281,9 +292,16 @@ public:
         // {{{ ...
         auto it = _entity_pools.insert({ pool, {} }).first;
         it->second.emplace(_next_entity_id, pool);
+        _entities.emplace(_next_entity_id, pool);
         _pool_set.insert(pool);
         _components.insert({ pool, {} });
         return Entity<MyECS, Pool>(_next_entity_id++, pool, this);
+        // }}}
+    }
+
+    Entity<MyECS, Pool> get(size_t id) {
+        // {{{
+        return *_entities.find(id);
         // }}}
     }
 
@@ -291,6 +309,7 @@ public:
         // {{{ ...
         for (auto& [_, pool_map]: _entity_pools)
             pool_map.erase(entity.id);
+        _entities.erase(entity.id);
         // }}}
     }
 
@@ -390,15 +409,15 @@ public:
     void start_frame()                          { _timer.start_frame(); }
     void reset_timer()                          { _timer.reset(); }
 
-    std::map<std::string, std::chrono::milliseconds> timer_st() const { return _timer.timer(false); }
-    std::map<std::string, std::chrono::milliseconds> timer_mt() const { return _timer.timer(true); }
+    std::vector<SystemTime> timer_st() const { return _timer.timer(false); }
+    std::vector<SystemTime> timer_mt() const { return _timer.timer(true); }
 
     // {{{ auxiliary methods
 private:
     using Time = std::chrono::time_point<std::chrono::high_resolution_clock>;
     static Time now() { return std::chrono::high_resolution_clock::now(); }
     void add_time(std::string const& name, Time start, bool mt) const { 
-        _timer.add_time(name, std::chrono::duration_cast<std::chrono::milliseconds>(now() - start), mt);
+        _timer.add_time(name, std::chrono::duration_cast<std::chrono::microseconds>(now() - start), mt);
     }
     // }}}
     
@@ -818,6 +837,7 @@ private:
     Global                                         _global;
     Threading                                      _threading           = Threading::Multi;
     mutable SyncQueue<Message>                     _messages            {};
+    std::unordered_map<size_t, Pool>               _entities            {};
     std::unordered_map<Pool, EntityPool>           _entity_pools        { { DefaultPool, {} } };
     std::unordered_map<Pool, ComponentTupleVector> _components          { { DefaultPool, {} } };
     size_t                                         _next_entity_id      = 0;

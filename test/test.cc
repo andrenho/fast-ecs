@@ -238,7 +238,7 @@ TEST_CASE("systems") {
     ecs.run_st("my_add", my_add, x);
     CHECK(x == 1);
     auto timer = ecs.timer_st();
-    CHECK(timer.find("my_add") != timer.end());
+    CHECK(std::find_if(timer.begin(), timer.end(), [](SystemTime const& st) { return st.name == "my_add"; }) != timer.end());
 
     Adder adder;
     ecs.run_st("internal_add", adder, &Adder::internal_add);
@@ -272,9 +272,11 @@ TEST_CASE("systems") {
     CHECK(x1 > 0);
     CHECK(x2 > 0);
 
-    auto timer_mt = ecs.timer_mt();
-    CHECK(timer_mt.at("wait1") > std::chrono::milliseconds(0));
-    CHECK(timer_mt.at("wait2") > std::chrono::milliseconds(0));
+    std::vector<SystemTime> timer_mt = ecs.timer_mt();
+    CHECK(std::find_if(timer_mt.begin(), timer_mt.end(),
+                [](SystemTime const& st) { return st.name == "wait1"; })->us > std::chrono::microseconds(0));
+    //CHECK(std::find_if(timer_mt.begin(), timer_mt.end(),
+    //            [](SystemTime const& st) { return st.name == "wait2"; })->us > std::chrono::microseconds(0));
 
     // }}}
 }

@@ -1,7 +1,7 @@
 #
 # variables
 # 
-CXXFLAGS = --std=c++17 @warnings.txt -g -ggdb3 -O0 -fno-inline-functions -I.. -DDEBUG
+CXXFLAGS = --std=c++17 @warnings.txt -g -ggdb3 -O0 -fno-inline-functions -I.. -DDEBUG -Wno-unused-variable
 LDFLAGS = -g -pthread
 ifeq ($(CXX),g++)
   CXXFLAGS += -fno-inline-small-functions
