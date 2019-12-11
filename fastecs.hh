@@ -301,7 +301,19 @@ public:
 
     Entity<MyECS, Pool> get(size_t id) {
         // {{{
-        return *_entities.find(id);
+        auto it = _entities.find(id);
+        if (it == _entities.end())
+            throw ECSError("Id " + std::to_string(id) + " not found.");
+        return Entity<MyECS, Pool>(id, it->second, this);
+        // }}}
+    }
+
+    ConstEntity<MyECS, Pool> get(size_t id) const {
+        // {{{
+        auto it = _entities.find(id);
+        if (it == _entities.end())
+            throw ECSError("Id " + std::to_string(id) + " not found.");
+        return ConstEntity<MyECS, Pool>(id, it->second, this);
         // }}}
     }
 
@@ -390,7 +402,7 @@ public:
     }
         
     template<typename T>
-    std::vector<T> messages() {   // non-const by design
+    std::vector<T> messages() const {
         // {{{ ...
         std::vector<T> r;
         for (auto ev : _messages.underlying_vector())
@@ -806,9 +818,9 @@ private:
 
     std::string debug_entity(size_t id, Pool pool, size_t spaces=0) const
     {
-        std::string s = std::string(spaces, ' ') + "{ ";
-        ((s += has_component<Components>(id, pool) ? debug_object<Components>(component<Components>(id, pool)) : ""), ...);
-        return s + "}";
+        std::string s = std::string(spaces, ' ') + "{\n";
+        ((s += has_component<Components>(id, pool) ? (std::string(9, ' ') + debug_object<Components>(component<Components>(id, pool)) + "\n") : ""), ...);
+        return s + std::string(6, ' ') + "}";
     }
 
     template <typename T>
