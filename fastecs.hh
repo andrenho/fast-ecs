@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <condition_variable>
-#include <chrono> 
+#include <chrono>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -87,8 +87,8 @@ static std::string debug_object(Obj const& obj) {
 template<typename ECS, typename Pool>
 class ConstEntity {
 public:
-    ConstEntity(size_t id, Pool pool, ECS const* ecs) 
-        : id(id), pool(pool), ecs(ecs) {}
+    ConstEntity(size_t id, Pool pool, ECS const* ecs)
+            : id(id), pool(pool), ecs(ecs) {}
 
     template<typename C>
     C const& get() const {
@@ -124,8 +124,8 @@ private:
 template<typename ECS, typename Pool>
 class Entity : public ConstEntity<ECS, Pool> {
 public:
-    Entity(size_t id, Pool pool, ECS* ecs) 
-        : ConstEntity<ECS, Pool>(id, pool, ecs), ecs(ecs) {}
+    Entity(size_t id, Pool pool, ECS* ecs)
+            : ConstEntity<ECS, Pool>(id, pool, ecs), ecs(ecs) {}
 
     template<typename C, typename... P>
     C& add(P&& ...pars) {
@@ -164,17 +164,17 @@ bool operator!=(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { r
 template <typename T>
 class SyncQueue {
 public:
-	void push_sync(const T& item)
-	{
+    void push_sync(const T& item)
+    {
         std::lock_guard<std::mutex> lock(mutex_);
-		queue_.push_back(item);
-	}
+        queue_.push_back(item);
+    }
 
-	void push_sync(T&& item)
-	{
+    void push_sync(T&& item)
+    {
         std::lock_guard<std::mutex> lock(mutex_);
-		queue_.push_back(std::move(item));
-	}
+        queue_.push_back(std::move(item));
+    }
 
     void push_nosync(const T& item)
     {
@@ -186,7 +186,7 @@ public:
         queue_.push_back(std::move(item));
     }
 
-    std::vector<T> const& underlying_vector() const { 
+    std::vector<T> const& underlying_vector() const {
         return queue_;
     }
 
@@ -232,8 +232,8 @@ public:
         {
             std::lock_guard<std::mutex> lock(mutex_);
             auto& timer = mt ? _timer_mt : _timer_st;
-            auto it = std::find_if(timer.begin(), timer.end(), 
-                    [&name](SystemTime const& s) { return s.name == name; });
+            auto it = std::find_if(timer.begin(), timer.end(),
+                                   [&name](SystemTime const& s) { return s.name == name; });
             if (it == timer.end())
                 timer.push_back({ name, us });
             else
@@ -269,14 +269,14 @@ public:
     using ConstEntityType = ConstEntity<MyECS, Pool>;
 
     template <typename... P>
-    explicit ECS(P&& ...pars) 
-        : _global(Global { pars... }) {}
+    explicit ECS(P&& ...pars)
+            : _global(Global { pars... }) {}
 
     ~ECS() { join(); }
 
     void set_threading(Threading t)         { _threading = t; }
 
-    // 
+    //
     // entities
     //
 
@@ -288,7 +288,7 @@ public:
         // }}}
     }
 
-    Entity<MyECS, Pool> add(Pool pool) { 
+    Entity<MyECS, Pool> add(Pool pool) {
         // {{{ ...
         auto it = _entity_pools.insert({ pool, {} }).first;
         it->second.emplace(_next_entity_id, pool);
@@ -337,6 +337,7 @@ public:
 
     std::vector<Entity<ECS, Pool>> entities(Pool pool) {
         // {{{ ...
+        _pool_set.insert(pool);
         return find_matching_entities(std::vector<Pool> { pool });
         // }}}
     }
@@ -389,10 +390,10 @@ public:
     Global const& operator()() const            { return _global; }
 
     //
-    // messages 
+    // messages
     //
 
-    void add_message(Message&& e) const { 
+    void add_message(Message&& e) const {
         // {{{ ...
         if (_running_mt)
             _messages.push_sync(std::move(e));
@@ -400,7 +401,7 @@ public:
             _messages.push_nosync(std::move(e));
         // }}}
     }
-        
+
     template<typename T>
     std::vector<T> messages() const {
         // {{{ ...
@@ -417,7 +418,7 @@ public:
     //
     // systems
     //
-    
+
     void start_frame()                          { _timer.start_frame(); }
     void reset_timer()                          { _timer.reset(); }
 
@@ -428,11 +429,11 @@ public:
 private:
     using Time = std::chrono::time_point<std::chrono::high_resolution_clock>;
     static Time now() { return std::chrono::high_resolution_clock::now(); }
-    void add_time(std::string const& name, Time start, bool mt) const { 
+    void add_time(std::string const& name, Time start, bool mt) const {
         _timer.add_time(name, std::chrono::duration_cast<std::chrono::microseconds>(now() - start), mt);
     }
     // }}}
-    
+
 public:
     template<typename F, typename... P>
     void run_st(std::string const& name, F f, P&& ...pars) const {
@@ -444,10 +445,10 @@ public:
     }
 
     template<typename O, typename F, typename... P, class = typename std::enable_if<std::is_class<O>::value>::type>
-    void run_st(std::string const& name, O& obj, F f, P&& ...pars) const { 
+    void run_st(std::string const& name, O& obj, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
-        (obj.*f)(*this, pars...);  
+        (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
     }
@@ -462,10 +463,10 @@ public:
     }
 
     template<typename O, typename F, typename... P, class = typename std::enable_if<std::is_class<O>::value>::type>
-    void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) { 
+    void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
-        (obj.*f)(*this, pars...);  
+        (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
     }
@@ -476,8 +477,8 @@ public:
     template<typename F, typename... P>
     void run_mt(std::string const& name, F f, P&& ...pars) const {
         // {{{ ...
-        static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)), 
-                "Don't use non-const references in multithreaded code. Use pointers instead.");
+        static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)),
+                      "Don't use non-const references in multithreaded code. Use pointers instead.");
         if (_threading == Threading::Single) {
             run_st(name, f, pars...);
         } else {
@@ -491,10 +492,10 @@ public:
     }
 
     template<typename O, typename F, typename... P, class = typename std::enable_if<std::is_class<O>::value>::type>
-    void run_mt(std::string const& name, O& obj, F f, P&& ...pars) const { 
+    void run_mt(std::string const& name, O& obj, F f, P&& ...pars) const {
         // {{{ ...
-        static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)), 
-                "Don't use non-const references in multithreaded code. Use pointers instead.");
+        static_assert(!(((std::is_reference_v<P> && !std::is_const_v<P>) || ...)),
+                      "Don't use non-const references in multithreaded code. Use pointers instead.");
         if (_threading == Threading::Single) {
             run_st(name, obj, f, pars...);
         } else {
@@ -520,7 +521,7 @@ public:
     friend class ConstEntity<ECS, Pool>;
     friend class Entity<ECS, Pool>;
 
-    // 
+    //
     // debugging
     //
 
@@ -538,7 +539,7 @@ public:
     std::string debug_all() const {
         // {{{
         return std::string("{\n   global = ") + debug_global() + ",\n"
-            "   entities = " + debug_entities(_pool_set, 3) + "\n}";
+                                                                 "   entities = " + debug_entities(_pool_set, 3) + "\n}";
         // }}}
     }
 
@@ -556,7 +557,7 @@ public:
 private:
 
     // {{{ templates & static assertions
-    
+
 #if __cplusplus < 201703L
 #error "A compiler with C++17 support is required."
 #endif
@@ -601,7 +602,9 @@ private:
     size_t size_to_reserve(Pools const& pools) const {
         size_t size = 0;
         for (auto const& pool: pools)
-            size += _entity_pools.at(pool).size();
+            try {
+                size += _entity_pools.at(pool).size();
+            } catch (std::out_of_range&) {}
         return size;
     }
 
@@ -611,6 +614,8 @@ private:
     std::vector<ConstEntity<ECS, Pool>> find_matching_entities(Pools const& pools) const {
         // {{{ ...
         size_t size = size_to_reserve(pools);
+        if (size == 0)
+            return {};
         std::vector<ConstEntity<ECS, Pool>> entities;
         entities.reserve(size);
         for (auto const& pool: pools)
@@ -619,11 +624,13 @@ private:
         return entities;
         // }}}
     }
-    
+
     template <typename Pools>
     std::vector<Entity<ECS, Pool>> find_matching_entities(Pools const& pools) {
         // {{{ ...
         size_t size = size_to_reserve(pools);
+        if (size == 0)
+            return {};
         std::vector<Entity<ECS, Pool>> entities;
         entities.reserve(size);
         for (auto const& pool: pools)
@@ -632,7 +639,7 @@ private:
         return entities;
         // }}}
     }
-    
+
     // TODO - the methods below are repeated for const and non-const. Can this be fixed?
 
     template <typename... C, typename Pools>
@@ -641,6 +648,8 @@ private:
         ((check_component<C>(), ...));
 
         size_t size = size_to_reserve(pools);
+        if (size == 0)
+            return {};
         std::vector<Entity<ECS, Pool>> entities;
         entities.reserve(size);
         for (auto const& pool: pools) {
@@ -651,7 +660,7 @@ private:
                 // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
                 std::tuple<my_iter<C>...> current;
                 ((std::get<my_iter<C>>(current) = comp_vec<C>(pool).begin()), ...);
-                
+
                 // while none of the iterators reached end
                 while (((std::get<my_iter<C>>(current) != comp_vec<C>(pool).end()) && ...)) {
                     // find iterator that is more advanced
@@ -682,6 +691,8 @@ private:
         ((check_component<C>(), ...));
 
         size_t size = size_to_reserve(pools);
+        if (size == 0)
+            return {};
         std::vector<ConstEntity<ECS, Pool>> entities;
         entities.reserve(size);
         for (auto const& pool: pools) {
@@ -692,7 +703,7 @@ private:
                 // initialize a tuple of iterators, each one pointing to the initial iterator of its component vector
                 std::tuple<my_citer<C>...> current;
                 ((std::get<my_citer<C>>(current) = comp_vec<C>(pool).cbegin()), ...);
-                
+
                 // while none of the iterators reached cend
                 while (((std::get<my_citer<C>>(current) != comp_vec<C>(pool).cend()) && ...)) {
                     // find iterator that is more advanced
@@ -728,7 +739,7 @@ private:
 
         auto& vec = comp_vec<C>(pool);
         auto it = std::lower_bound(begin(vec), end(vec), id,
-            [](auto const& p, auto e) { return p.first < e; });
+                                   [](auto const& p, auto e) { return p.first < e; });
 
         if (it != vec.end() && it->first == id)
             throw ECSError(std::string("Component '") + type_name<C>() + "' already exist for entity " + std::to_string(id) + ".");
@@ -764,7 +775,7 @@ private:
 
         auto& vec = comp_vec<C>(pool);
         auto it = std::lower_bound(begin(vec), end(vec), id,
-            [](auto const& p, size_t e) { return p.first < e; });
+                                   [](auto const& p, size_t e) { return p.first < e; });
         if (it != vec.end() && it->first == id)
             return &it->second;
         return nullptr;
@@ -785,7 +796,7 @@ private:
 
         auto& vec = comp_vec<C>(pool);
         auto it = std::lower_bound(begin(vec), end(vec), id,
-            [](auto const& p, size_t e) { return p.first < e; });
+                                   [](auto const& p, size_t e) { return p.first < e; });
         if (it != vec.end() && it->first == id)
             vec.erase(it);
         else
@@ -810,7 +821,7 @@ private:
     // {{{ private methods (debugging)
 
     template <typename C>
-    std::string debug_component(size_t id) const 
+    std::string debug_component(size_t id) const
     {
         check_component<C>();
         return "{ " + debug_object<C>(component<C>(id)) + "}";
