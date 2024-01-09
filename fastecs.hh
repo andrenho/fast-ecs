@@ -1,6 +1,8 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#define ECS_VERSION "0.3.1"
+
 #include <algorithm>
 #include <condition_variable>
 #include <chrono>
@@ -103,11 +105,11 @@ public:
     }
 
     template<typename C>
-    bool has() const {
+    [[nodiscard]] bool has() const {
         return ecs->template has_component<C>(id, pool);
     }
 
-    std::string debug() const {
+    [[nodiscard]] std::string debug() const {
         return ecs->debug_entity(id, pool);
     }
 
@@ -197,6 +199,13 @@ public:
         queue_.clear();
     }
 
+    void clear_with_system(SystemPtr system_ptr) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.erase(std::remove_if(queue_.begin(), queue_.end(),
+                                [&system_ptr](std::pair<T, SystemPtr> const& t) { return t.second == system_ptr; }),
+                     queue_.end());
+    }
+
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.size();
@@ -245,7 +254,7 @@ public:
             add_time("multithreaded", us, false);
     }
 
-    std::vector<SystemTime> timer(bool mt) const {
+    [[nodiscard]] std::vector<SystemTime> timer(bool mt) const {
         auto& timer = (mt ? _timer_mt : _timer_st);
         std::vector<SystemTime> t(timer.begin(), timer.end());
         for (auto& [_, us]: t)
@@ -271,6 +280,8 @@ class ECS {
 public:
     using EntityType = Entity<MyECS, Pool>;
     using ConstEntityType = ConstEntity<MyECS, Pool>;
+
+    static const char* version() { return ECS_VERSION; }
 
     template <typename... P>
     explicit ECS(P&& ...pars)
@@ -467,7 +478,9 @@ public:
     // {{{ auxiliary methods
 private:
     using Time = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
     static Time now() { return std::chrono::high_resolution_clock::now(); }
+
     void add_time(std::string const& name, Time start, bool mt) const {
         _timer.add_time(name, std::chrono::duration_cast<std::chrono::microseconds>(now() - start), mt);
     }
@@ -479,6 +492,7 @@ public:
         // {{{ ...
         auto start = now();
         _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -489,6 +503,7 @@ public:
         // {{{ ...
         auto start = now();
         _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -499,6 +514,7 @@ public:
         // {{{ ...
         auto start = now();
         _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -509,6 +525,7 @@ public:
         // {{{ ...
         auto start = now();
         _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -525,9 +542,10 @@ public:
         if (_threading == Threading::Single) {
             run_st(name, f, pars...);
         } else {
-            _threads.emplace_back([](std::string name, MyECS const& ecs, auto f, auto... pars) {
+            _threads.emplace_back([this](std::string name, MyECS const& ecs, auto f, auto... pars) {
                 auto start = now();
                 _current_system = reinterpret_cast<SystemPtr>(f);
+                _messages.clear_with_system(_current_system);
                 f(ecs, pars...);
                 ecs.add_time(name, start, true);
             }, name, std::ref(*this), f, pars...);
@@ -543,9 +561,10 @@ public:
         if (_threading == Threading::Single) {
             run_st(name, obj, f, pars...);
         } else {
-            _threads.emplace_back([](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
+            _threads.emplace_back([this](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
                 auto start = now();
                 _current_system = reinterpret_cast<SystemPtr>(f);
+                _messages.clear_with_system(_current_system);
                 std::invoke(f, obj, ecs, pars...);
                 ecs.add_time(name, start, true);
             }, &obj, name, std::ref(*this), f, pars...);
