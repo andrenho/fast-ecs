@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <chrono>
+#include <functional>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -26,6 +27,7 @@ enum class Threading { Single, Multi };
 enum class NoPool {};
 struct     NoGlobal {};
 using      NoMessageQueue = std::variant<std::nullptr_t>;
+using      SystemPtr = void*;
 
 // {{{ exception class
 
@@ -164,24 +166,24 @@ bool operator!=(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { r
 template <typename T>
 class SyncQueue {
 public:
-    void push_sync(const T& item)
+    void push_sync(const T& item, SystemPtr current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         queue_.push_back(item);
     }
 
-    void push_sync(T&& item)
+    void push_sync(T&& item, SystemPtr current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         queue_.push_back(std::move(item));
     }
 
-    void push_nosync(const T& item)
+    void push_nosync(const T& item, SystemPtr current_system)
     {
         queue_.push_back(item);
     }
 
-    void push_nosync(T&& item)
+    void push_nosync(T&& item, SystemPtr current_system)
     {
         queue_.push_back(std::move(item));
     }
@@ -201,7 +203,7 @@ public:
     }
 
 private:
-    std::vector<T>     queue_ {};
+    std::vector<T> queue_ {};
     mutable std::mutex mutex_ {};
 };
 
@@ -264,6 +266,8 @@ template <typename Global, typename Message, typename Pool, typename... Componen
 class ECS {
     using MyECS = ECS<Global, Message, Pool, Components...>;
 
+    static inline thread_local SystemPtr _current_system = nullptr;
+
 public:
     using EntityType = Entity<MyECS, Pool>;
     using ConstEntityType = ConstEntity<MyECS, Pool>;
@@ -308,12 +312,47 @@ public:
         // }}}
     }
 
+    template <typename Component>
+    Component& get(size_t id) {
+        // {{{
+        return get(id).template get<Component>();
+        // }}}
+    }
+
+    template<typename Component>
+    Component* get_ptr(size_t id) const {
+        // {{{
+        return get(id).template get_ptr<Component>();
+        // }}}
+    }
+
+    template <typename Component>
+    bool has(size_t id) {
+        // {{{
+        return get(id).template has<Component>();
+        // }}}
+    }
+
     ConstEntity<MyECS, Pool> get(size_t id) const {
         // {{{
         auto it = _entities.find(id);
         if (it == _entities.end())
             throw ECSError("Id " + std::to_string(id) + " not found.");
         return ConstEntity<MyECS, Pool>(id, it->second, this);
+        // }}}
+    }
+
+    template <typename Component>
+    Component const& get(size_t id) const {
+        // {{{
+        return get(id).template get<Component>();
+        // }}}
+    }
+
+    bool exists(size_t id) {
+        // {{{
+        auto it = _entities.find(id);
+        return it != _entities.end();
         // }}}
     }
 
@@ -396,9 +435,9 @@ public:
     void add_message(Message&& e) const {
         // {{{ ...
         if (_running_mt)
-            _messages.push_sync(std::move(e));
+            _messages.push_sync(std::move(e), _current_system);
         else
-            _messages.push_nosync(std::move(e));
+            _messages.push_nosync(std::move(e), _current_system);
         // }}}
     }
 
@@ -439,6 +478,7 @@ public:
     void run_st(std::string const& name, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
         f(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -448,6 +488,7 @@ public:
     void run_st(std::string const& name, O& obj, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -457,6 +498,7 @@ public:
     void run_mutable(std::string const& name, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
         f(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -466,6 +508,7 @@ public:
     void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -484,6 +527,7 @@ public:
         } else {
             _threads.emplace_back([](std::string name, MyECS const& ecs, auto f, auto... pars) {
                 auto start = now();
+                _current_system = reinterpret_cast<SystemPtr>(f);
                 f(ecs, pars...);
                 ecs.add_time(name, start, true);
             }, name, std::ref(*this), f, pars...);
@@ -501,7 +545,8 @@ public:
         } else {
             _threads.emplace_back([](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
                 auto start = now();
-                (obj.*f)(ecs, pars...);
+                _current_system = reinterpret_cast<SystemPtr>(f);
+                std::invoke(f, obj, ecs, pars...);
                 ecs.add_time(name, start, true);
             }, &obj, name, std::ref(*this), f, pars...);
         }
