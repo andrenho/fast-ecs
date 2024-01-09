@@ -18,9 +18,13 @@ struct Direction {
 // ENGINE
 //
 
+struct Message {};
+
+using Messages = std::variant<Message>;
+
 using MyECS = ecs::ECS<
     ecs::NoGlobal, 
-    ecs::NoMessageQueue, 
+    Messages,
     ecs::NoPool, 
     Position, Direction>;
 
@@ -35,6 +39,7 @@ static void position_system(MyECS& ecs) {
         std::cout << "Entity " << e.id << " position.x was " << pos.x -1 <<
                      " but now is " << pos.x << ".\n";
     }
+    ecs.add_message(Message {});
 }
 
 static void direction_system(MyECS const& ecs) {
@@ -62,6 +67,16 @@ int main()
 
     ecs.run_mutable("position", position_system);
     ecs.run_st("direction", direction_system);
+
+    for (auto const& msg: ecs.messages<Message>())
+        printf("X");
+    printf("\n");
+
+    ecs.run_mutable("position", position_system);
+
+    for (auto const& msg: ecs.messages<Message>())
+        printf("Y");
+    printf("\n");
 }
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker

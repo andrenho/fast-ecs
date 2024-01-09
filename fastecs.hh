@@ -1,9 +1,12 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
+#define ECS_VERSION "0.3.1"
+
 #include <algorithm>
 #include <condition_variable>
 #include <chrono>
+#include <functional>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -26,6 +29,7 @@ enum class Threading { Single, Multi };
 enum class NoPool {};
 struct     NoGlobal {};
 using      NoMessageQueue = std::variant<std::nullptr_t>;
+using      SystemPtr = void*;
 
 // {{{ exception class
 
@@ -101,11 +105,11 @@ public:
     }
 
     template<typename C>
-    bool has() const {
+    [[nodiscard]] bool has() const {
         return ecs->template has_component<C>(id, pool);
     }
 
-    std::string debug() const {
+    [[nodiscard]] std::string debug() const {
         return ecs->debug_entity(id, pool);
     }
 
@@ -164,29 +168,29 @@ bool operator!=(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { r
 template <typename T>
 class SyncQueue {
 public:
-    void push_sync(const T& item)
+    void push_sync(const T& item, SystemPtr current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push_back(item);
+        queue_.push_back({ item, current_system });
     }
 
-    void push_sync(T&& item)
+    void push_sync(T&& item, SystemPtr current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push_back(std::move(item));
+        queue_.push_back({ std::move(item), current_system });
     }
 
-    void push_nosync(const T& item)
+    void push_nosync(const T& item, SystemPtr current_system)
     {
-        queue_.push_back(item);
+        queue_.push_back({ item, current_system });
     }
 
-    void push_nosync(T&& item)
+    void push_nosync(T&& item, SystemPtr current_system)
     {
-        queue_.push_back(std::move(item));
+        queue_.push_back({ std::move(item), current_system });
     }
 
-    std::vector<T> const& underlying_vector() const {
+    std::vector<std::pair<T, SystemPtr>> const& underlying_vector() const {
         return queue_;
     }
 
@@ -195,13 +199,20 @@ public:
         queue_.clear();
     }
 
+    void clear_with_system(SystemPtr system_ptr) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.erase(std::remove_if(queue_.begin(), queue_.end(),
+                                [&system_ptr](std::pair<T, SystemPtr> const& t) { return t.second == system_ptr; }),
+                     queue_.end());
+    }
+
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.size();
     }
 
 private:
-    std::vector<T>     queue_ {};
+    std::vector<std::pair<T, SystemPtr>> queue_ {};
     mutable std::mutex mutex_ {};
 };
 
@@ -243,7 +254,7 @@ public:
             add_time("multithreaded", us, false);
     }
 
-    std::vector<SystemTime> timer(bool mt) const {
+    [[nodiscard]] std::vector<SystemTime> timer(bool mt) const {
         auto& timer = (mt ? _timer_mt : _timer_st);
         std::vector<SystemTime> t(timer.begin(), timer.end());
         for (auto& [_, us]: t)
@@ -264,9 +275,13 @@ template <typename Global, typename Message, typename Pool, typename... Componen
 class ECS {
     using MyECS = ECS<Global, Message, Pool, Components...>;
 
+    static inline thread_local SystemPtr _current_system = nullptr;
+
 public:
     using EntityType = Entity<MyECS, Pool>;
     using ConstEntityType = ConstEntity<MyECS, Pool>;
+
+    static const char* version() { return ECS_VERSION; }
 
     template <typename... P>
     explicit ECS(P&& ...pars)
@@ -308,12 +323,47 @@ public:
         // }}}
     }
 
+    template <typename Component>
+    Component& get(size_t id) {
+        // {{{
+        return get(id).template get<Component>();
+        // }}}
+    }
+
+    template<typename Component>
+    Component* get_ptr(size_t id) const {
+        // {{{
+        return get(id).template get_ptr<Component>();
+        // }}}
+    }
+
+    template <typename Component>
+    bool has(size_t id) {
+        // {{{
+        return get(id).template has<Component>();
+        // }}}
+    }
+
     ConstEntity<MyECS, Pool> get(size_t id) const {
         // {{{
         auto it = _entities.find(id);
         if (it == _entities.end())
             throw ECSError("Id " + std::to_string(id) + " not found.");
         return ConstEntity<MyECS, Pool>(id, it->second, this);
+        // }}}
+    }
+
+    template <typename Component>
+    Component const& get(size_t id) const {
+        // {{{
+        return get(id).template get<Component>();
+        // }}}
+    }
+
+    bool exists(size_t id) {
+        // {{{
+        auto it = _entities.find(id);
+        return it != _entities.end();
         // }}}
     }
 
@@ -396,9 +446,9 @@ public:
     void add_message(Message&& e) const {
         // {{{ ...
         if (_running_mt)
-            _messages.push_sync(std::move(e));
+            _messages.push_sync(std::move(e), _current_system);
         else
-            _messages.push_nosync(std::move(e));
+            _messages.push_nosync(std::move(e), _current_system);
         // }}}
     }
 
@@ -406,9 +456,9 @@ public:
     std::vector<T> messages() const {
         // {{{ ...
         std::vector<T> r;
-        for (auto ev : _messages.underlying_vector())
-            if (std::holds_alternative<T>(ev))
-                r.push_back(std::get<T>(ev));
+        for (std::pair<Message, SystemPtr> ev : _messages.underlying_vector())
+            if (std::holds_alternative<T>(ev.first))
+                r.push_back(std::get<T>(ev.first));
         return r;
         // }}}
     }
@@ -428,7 +478,9 @@ public:
     // {{{ auxiliary methods
 private:
     using Time = std::chrono::time_point<std::chrono::high_resolution_clock>;
+
     static Time now() { return std::chrono::high_resolution_clock::now(); }
+
     void add_time(std::string const& name, Time start, bool mt) const {
         _timer.add_time(name, std::chrono::duration_cast<std::chrono::microseconds>(now() - start), mt);
     }
@@ -439,6 +491,8 @@ public:
     void run_st(std::string const& name, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -448,6 +502,8 @@ public:
     void run_st(std::string const& name, O& obj, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -457,6 +513,8 @@ public:
     void run_mutable(std::string const& name, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -466,6 +524,8 @@ public:
     void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
+        _current_system = reinterpret_cast<SystemPtr>(f);
+        _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
         // }}}
@@ -482,8 +542,10 @@ public:
         if (_threading == Threading::Single) {
             run_st(name, f, pars...);
         } else {
-            _threads.emplace_back([](std::string name, MyECS const& ecs, auto f, auto... pars) {
+            _threads.emplace_back([this](std::string name, MyECS const& ecs, auto f, auto... pars) {
                 auto start = now();
+                _current_system = reinterpret_cast<SystemPtr>(f);
+                _messages.clear_with_system(_current_system);
                 f(ecs, pars...);
                 ecs.add_time(name, start, true);
             }, name, std::ref(*this), f, pars...);
@@ -499,9 +561,11 @@ public:
         if (_threading == Threading::Single) {
             run_st(name, obj, f, pars...);
         } else {
-            _threads.emplace_back([](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
+            _threads.emplace_back([this](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
                 auto start = now();
-                (obj.*f)(ecs, pars...);
+                _current_system = reinterpret_cast<SystemPtr>(f);
+                _messages.clear_with_system(_current_system);
+                std::invoke(f, obj, ecs, pars...);
                 ecs.add_time(name, start, true);
             }, &obj, name, std::ref(*this), f, pars...);
         }

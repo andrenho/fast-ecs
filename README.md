@@ -1,6 +1,3 @@
-_A new version was released in 08/dec/2019. This version breaks compatibility with the previous one.
-It simplifies many of the calls and allows for parallelization._
-
 # fast-ecs
 A C++17 fast, storage-wise, header-only Entity Component System library.
 
@@ -142,6 +139,17 @@ class Entity {
     Component  remove<Component>();   // Remove a component
     bool       has<Component>();      // Returns true if the entity has the component.
     string     debug();               // Returns a textual description of the entity.
+}
+```
+
+Components can also be accessed directly from the ECS main class using the following shorthands:
+
+```C++
+class ECS<...> {
+    Component& get<Component>(size_t id);      // Return a previously created component
+    Component* get_ptr<Component>(size_t id);  // Return a pointer to a component, or nullptr if the component
+                                               // doesn't exists
+    bool       has<Component>(size_t id);      // Returns true if the entity has the component.
 }
 ```
 
@@ -314,10 +322,10 @@ e.add_message(MessageDialog { "Hello!" });
 for (auto const& msg: ecs.messages<MessageDialog>()) {
     // do something with `msg`...
 }
-
-// At the end of each loop, the queue must be cleared.
-ecs.clear_messages();
 ```
+
+Messages are automatically removed from the queue when a whole loop is completed, and the same system that created
+the message is executed again.
 
 ## Component printing
 
