@@ -169,26 +169,26 @@ public:
     void push_sync(const T& item, SystemPtr current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push_back(item);
+        queue_.push_back({ item, current_system });
     }
 
     void push_sync(T&& item, SystemPtr current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        queue_.push_back(std::move(item));
+        queue_.push_back({ std::move(item), current_system });
     }
 
     void push_nosync(const T& item, SystemPtr current_system)
     {
-        queue_.push_back(item);
+        queue_.push_back({ item, current_system });
     }
 
     void push_nosync(T&& item, SystemPtr current_system)
     {
-        queue_.push_back(std::move(item));
+        queue_.push_back({ std::move(item), current_system });
     }
 
-    std::vector<T> const& underlying_vector() const {
+    std::vector<std::pair<T, SystemPtr>> const& underlying_vector() const {
         return queue_;
     }
 
@@ -203,7 +203,7 @@ public:
     }
 
 private:
-    std::vector<T> queue_ {};
+    std::vector<std::pair<T, SystemPtr>> queue_ {};
     mutable std::mutex mutex_ {};
 };
 
@@ -445,9 +445,9 @@ public:
     std::vector<T> messages() const {
         // {{{ ...
         std::vector<T> r;
-        for (auto ev : _messages.underlying_vector())
-            if (std::holds_alternative<T>(ev))
-                r.push_back(std::get<T>(ev));
+        for (std::pair<Message, SystemPtr> ev : _messages.underlying_vector())
+            if (std::holds_alternative<T>(ev.first))
+                r.push_back(std::get<T>(ev.first));
         return r;
         // }}}
     }
