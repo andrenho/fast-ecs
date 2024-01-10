@@ -29,7 +29,7 @@ enum class Threading { Single, Multi };
 enum class NoPool {};
 struct     NoGlobal {};
 using      NoMessageQueue = std::variant<std::nullptr_t>;
-using      SystemPtr = std::string;
+using      SystemPtr = int16_t;
 
 // {{{ exception class
 
@@ -206,6 +206,13 @@ public:
                      queue_.end());
     }
 
+    template<typename U>
+    void clear_with_type() {
+        queue_.erase(std::remove_if(queue_.begin(), queue_.end(),
+                     [](std::pair<T, SystemPtr> const& t) { return std::holds_alternative<U>(t.first); }),
+                     queue_.end());
+    }
+
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.size();
@@ -274,8 +281,6 @@ private:
 template <typename Global, typename Message, typename Pool, typename... Components>
 class ECS {
     using MyECS = ECS<Global, Message, Pool, Components...>;
-
-    static inline thread_local SystemPtr _current_system = "";
 
 public:
     using EntityType = Entity<MyECS, Pool>;
@@ -463,6 +468,17 @@ public:
         // }}}
     }
 
+    template<typename T>
+    std::vector<T> pop_messages() const {
+        // {{{ ...
+        std::vector<T> r;
+        for (std::pair<Message, SystemPtr> ev : _messages.underlying_vector())
+            if (std::holds_alternative<T>(ev.first))
+                r.push_back(std::get<T>(ev.first));
+        _messages.template clear_with_type<T>();
+        return r;
+    }
+
     void clear_messages()                       { _messages.clear(); }
 
     //
@@ -484,6 +500,20 @@ private:
     void add_time(std::string const& name, Time start, bool mt) const {
         _timer.add_time(name, std::chrono::duration_cast<std::chrono::microseconds>(now() - start), mt);
     }
+
+    void update_current_system(std::string const& system_name) const {
+        auto it = _system_idx.find(system_name);
+        if (it == _system_idx.end()) {
+            if (_system_idx.empty())
+                _current_system = 0;
+            else
+                _current_system = std::max_element(_system_idx.begin(), _system_idx.end(),
+                    [](auto const& a, auto const& b) { return a.second < b.second; })->second + 1;
+            _system_idx[system_name] = _current_system;
+        } else {  // more likely branch
+            _current_system = it->second;
+        }
+    }
     // }}}
 
 public:
@@ -491,7 +521,7 @@ public:
     void run_st(std::string const& name, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
-        _current_system = name;
+        update_current_system(name);
         _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
@@ -502,7 +532,7 @@ public:
     void run_st(std::string const& name, O& obj, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
-        _current_system = name;
+        update_current_system(name);
         _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
@@ -513,7 +543,7 @@ public:
     void run_mutable(std::string const& name, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
-        _current_system = name;
+        update_current_system(name);
         _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
@@ -524,7 +554,7 @@ public:
     void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
-        _current_system = name;
+        update_current_system(name);
         _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
@@ -544,7 +574,7 @@ public:
         } else {
             _threads.emplace_back([this](std::string name, MyECS const& ecs, auto f, auto... pars) {
                 auto start = now();
-                _current_system = name;
+                update_current_system(name);
                 _messages.clear_with_system(_current_system);
                 f(ecs, pars...);
                 ecs.add_time(name, start, true);
@@ -563,7 +593,7 @@ public:
         } else {
             _threads.emplace_back([this](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
                 auto start = now();
-                _current_system = name;
+                update_current_system(name);
                 _messages.clear_with_system(_current_system);
                 std::invoke(f, obj, ecs, pars...);
                 ecs.add_time(name, start, true);
@@ -940,18 +970,20 @@ private:
 
     using EntityPool = std::unordered_map<size_t, Pool>;
 
-    Global                                         _global;
-    Threading                                      _threading           = Threading::Multi;
-    mutable SyncQueue<Message>                     _messages            {};
-    std::unordered_map<size_t, Pool>               _entities            {};
-    std::unordered_map<Pool, EntityPool>           _entity_pools        { { DefaultPool, {} } };
-    std::unordered_map<Pool, ComponentTupleVector> _components          { { DefaultPool, {} } };
-    size_t                                         _next_entity_id      = 0;
-    std::set<Pool>                                 _pool_set            { DefaultPool };
-    bool                                           _running_mt          = false;
-    mutable Timer                                  _timer               {};
-    mutable std::vector<std::thread>               _threads             {};
+    Global                                             _global;
+    Threading                                          _threading           = Threading::Multi;
+    mutable SyncQueue<Message>                         _messages            {};
+    std::unordered_map<size_t, Pool>                   _entities            {};
+    std::unordered_map<Pool, EntityPool>               _entity_pools        { { DefaultPool, {} } };
+    std::unordered_map<Pool, ComponentTupleVector>     _components          { { DefaultPool, {} } };
+    size_t                                             _next_entity_id      = 0;
+    std::set<Pool>                                     _pool_set            { DefaultPool };
+    bool                                               _running_mt          = false;
+    mutable Timer                                      _timer               {};
+    mutable std::vector<std::thread>                   _threads             {};
+    mutable std::unordered_map<std::string, SystemPtr> _system_idx          {};
 
+    static inline thread_local SystemPtr               _current_system      = -1;
     static constexpr Pool DefaultPool = static_cast<Pool>(std::numeric_limits<typename std::underlying_type<Pool>::type>::max());
 
     // }}}
