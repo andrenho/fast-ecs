@@ -29,7 +29,7 @@ enum class Threading { Single, Multi };
 enum class NoPool {};
 struct     NoGlobal {};
 using      NoMessageQueue = std::variant<std::nullptr_t>;
-using      SystemPtr = void*;
+using      SystemPtr = std::string;
 
 // {{{ exception class
 
@@ -168,24 +168,24 @@ bool operator!=(Entity<ECS, Pool> const& a, ConstEntity<ECS, Pool> const& b) { r
 template <typename T>
 class SyncQueue {
 public:
-    void push_sync(const T& item, SystemPtr current_system)
+    void push_sync(const T& item, SystemPtr const& current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         queue_.push_back({ item, current_system });
     }
 
-    void push_sync(T&& item, SystemPtr current_system)
+    void push_sync(T&& item, SystemPtr const& current_system)
     {
         std::lock_guard<std::mutex> lock(mutex_);
         queue_.push_back({ std::move(item), current_system });
     }
 
-    void push_nosync(const T& item, SystemPtr current_system)
+    void push_nosync(const T& item, SystemPtr const& current_system)
     {
         queue_.push_back({ item, current_system });
     }
 
-    void push_nosync(T&& item, SystemPtr current_system)
+    void push_nosync(T&& item, SystemPtr const& current_system)
     {
         queue_.push_back({ std::move(item), current_system });
     }
@@ -199,7 +199,7 @@ public:
         queue_.clear();
     }
 
-    void clear_with_system(SystemPtr system_ptr) {
+    void clear_with_system(SystemPtr const& system_ptr) {
         std::lock_guard<std::mutex> lock(mutex_);
         queue_.erase(std::remove_if(queue_.begin(), queue_.end(),
                                 [&system_ptr](std::pair<T, SystemPtr> const& t) { return t.second == system_ptr; }),
@@ -275,7 +275,7 @@ template <typename Global, typename Message, typename Pool, typename... Componen
 class ECS {
     using MyECS = ECS<Global, Message, Pool, Components...>;
 
-    static inline thread_local SystemPtr _current_system = nullptr;
+    static inline thread_local SystemPtr _current_system = "";
 
 public:
     using EntityType = Entity<MyECS, Pool>;
@@ -491,7 +491,7 @@ public:
     void run_st(std::string const& name, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
-        _current_system = reinterpret_cast<SystemPtr>(f);
+        _current_system = name;
         _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
@@ -502,7 +502,7 @@ public:
     void run_st(std::string const& name, O& obj, F f, P&& ...pars) const {
         // {{{ ...
         auto start = now();
-        _current_system = reinterpret_cast<SystemPtr>(f);
+        _current_system = name;
         _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
@@ -513,7 +513,7 @@ public:
     void run_mutable(std::string const& name, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
-        _current_system = reinterpret_cast<SystemPtr>(f);
+        _current_system = name;
         _messages.clear_with_system(_current_system);
         f(*this, pars...);
         add_time(name, start, false);
@@ -524,7 +524,7 @@ public:
     void run_mutable(std::string const& name, O& obj, F f, P&& ...pars) {
         // {{{ ...
         auto start = now();
-        _current_system = reinterpret_cast<SystemPtr>(f);
+        _current_system = name;
         _messages.clear_with_system(_current_system);
         (obj.*f)(*this, pars...);
         add_time(name, start, false);
@@ -544,7 +544,7 @@ public:
         } else {
             _threads.emplace_back([this](std::string name, MyECS const& ecs, auto f, auto... pars) {
                 auto start = now();
-                _current_system = reinterpret_cast<SystemPtr>(f);
+                _current_system = name;
                 _messages.clear_with_system(_current_system);
                 f(ecs, pars...);
                 ecs.add_time(name, start, true);
@@ -563,7 +563,7 @@ public:
         } else {
             _threads.emplace_back([this](auto* obj, std::string name, MyECS const& ecs, auto f, auto&... pars) {
                 auto start = now();
-                _current_system = reinterpret_cast<SystemPtr>(f);
+                _current_system = name;
                 _messages.clear_with_system(_current_system);
                 std::invoke(f, obj, ecs, pars...);
                 ecs.add_time(name, start, true);
