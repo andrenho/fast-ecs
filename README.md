@@ -344,6 +344,9 @@ ostream& operator<<(ostream& out, Direction const& dir) {
 // Then, to print all components of an entity:
 cout << entity.debug() << "\n";
 
+// To print all entities that have a specific component:
+cout << e.debug_entities<Important>() << "\n";
+
 // If the method `operator<<` is implemented to the Global type, global data
 // can be printed with:
 cout << e.debug_global() << "\n";

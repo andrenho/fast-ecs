@@ -78,7 +78,7 @@ int main()
         printf("Y");
     printf("\n");
 
-    std::cout << ecs.debug_entities<Position>() << "\n";
+    std::cout << ecs.debug_entities<Position, Direction>() << "\n";
 }
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker
