@@ -77,6 +77,8 @@ int main()
     for (auto const& msg: ecs.messages<Message>())
         printf("Y");
     printf("\n");
+
+    std::cout << ecs.debug_entities<Position>() << "\n";
 }
 
 // vim: ts=4:sw=4:sts=4:expandtab:foldmethod=marker

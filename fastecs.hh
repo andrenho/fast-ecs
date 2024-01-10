@@ -602,8 +602,27 @@ public:
 
     std::string debug_all() const {
         // {{{
-        return std::string("{\n   global = ") + debug_global() + ",\n"
-                                                                 "   entities = " + debug_entities(_pool_set, 3) + "\n}";
+        return std::string("{\n   global = ") + debug_global() + ",\n   entities = " + debug_entities(_pool_set, 3) + "\n}";
+        // }}}
+    }
+
+    template <typename... C>
+    std::string debug_entities(size_t spaces=0) const
+    {
+        // {{{ ...
+        auto entities = find_matching_entities(_pool_set);
+        std::sort(entities.begin(), entities.end());
+
+        std::string s = "{\n";
+        for (auto const& ent : entities) {
+            bool print = ((ent.template has<C>() || ...));
+            if (print) {
+                s += std::string(spaces, ' ') + std::string("   [");
+                s += std::to_string(ent.id);
+                s += "] = " + ent.debug() + ",\n";
+            }
+        }
+        return s + std::string(spaces, ' ') + "}";
         // }}}
     }
 
@@ -894,8 +913,8 @@ private:
     std::string debug_entity(size_t id, Pool pool, size_t spaces=0) const
     {
         std::string s = std::string(spaces, ' ') + "{\n";
-        ((s += has_component<Components>(id, pool) ? (std::string(9, ' ') + debug_object<Components>(component<Components>(id, pool)) + "\n") : ""), ...);
-        return s + std::string(6, ' ') + "}";
+        ((s += has_component<Components>(id, pool) ? (std::string(6, ' ') + debug_object<Components>(component<Components>(id, pool)) + "\n") : ""), ...);
+        return s + std::string(3, ' ') + "}";
     }
 
     template <typename T>
