@@ -322,6 +322,11 @@ e.add_message(MessageDialog { "Hello!" });
 for (auto const& msg: ecs.messages<MessageDialog>()) {
     // do something with `msg`...
 }
+
+// This will both read, and remove messages from the queue.
+for (auto const& msg: ecs.messages<MessageDialog>()) {
+    // do something with `msg`...
+}
 ```
 
 Messages are automatically removed from the queue when a whole loop is completed, and the same system that created
