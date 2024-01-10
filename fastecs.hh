@@ -1,7 +1,7 @@
 #ifndef FASTECS_HH_
 #define FASTECS_HH_
 
-#define ECS_VERSION "0.3.1"
+#define ECS_VERSION "0.3.3"
 
 #include <algorithm>
 #include <condition_variable>
